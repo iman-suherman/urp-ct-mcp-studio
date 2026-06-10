@@ -232,8 +232,8 @@ async function main() {
 
   const existing = readState();
   const rsExisting = getRepoState(existing, repo);
-  if (rsExisting.status === "in_progress" || rsExisting.status === "queued") {
-    console.log(`deploy-runner: skip — ${repo} already ${rsExisting.status}`);
+  if (rsExisting.status === "in_progress") {
+    console.log(`deploy-runner: skip — ${repo} already in progress`);
     process.exit(0);
   }
 
