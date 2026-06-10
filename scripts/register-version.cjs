@@ -7,6 +7,11 @@ const { loadDotenv } = require("./load-dotenv.cjs");
 const { getProjectAdcPath } = require("./gcp-lib-adc.cjs");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
 const { versionSortKey, versionDocId } = require("./semver.cjs");
+const {
+  publicDownloadUrl,
+  publicLatestDownloadUrl,
+  resolveDownloadBase,
+} = require("./public-download-url.cjs");
 const fs = require("fs");
 
 const root = path.join(__dirname, "..");
@@ -75,9 +80,17 @@ async function registerPluginVersion({
       vsixFileName: path.basename(objectPath),
     },
     downloadUrl: `gs://${bucket}/${objectPath}`,
-    publicDownloadUrl: `https://storage.googleapis.com/${bucket}/${objectPath}`,
+    publicDownloadUrl: publicDownloadUrl({
+      base: resolveDownloadBase(),
+      objectPath,
+      version: release.version,
+      pluginId: release.pluginId,
+    }),
     latestDownloadUrl: `gs://${bucket}/${latestObjectPath}`,
-    publicLatestDownloadUrl: `https://storage.googleapis.com/${bucket}/${latestObjectPath}`,
+    publicLatestDownloadUrl: publicLatestDownloadUrl({
+      base: resolveDownloadBase(),
+      latestObjectPath,
+    }),
     releaseNotesUrl: releaseNotesObjectPath
       ? `gs://${bucket}/${releaseNotesObjectPath}`
       : null,

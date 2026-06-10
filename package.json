@@ -40,6 +40,10 @@
     "release-notes": "node scripts/generate-release-notes.cjs",
     "deploy:registry": "node scripts/deploy-registry-api.cjs",
     "deploy:website": "node scripts/deploy-website.cjs",
+    "deploy:retry": "node scripts/deploy-retry.cjs",
+    "deploy:stop": "node scripts/deploy-stop.cjs",
+    "ci": "node scripts/ci-deploy-status.cjs",
+    "postpush:website": "node scripts/post-push-website.cjs",
     "dev:registry": "npm install --prefix services/registry-api && npm run dev --prefix services/registry-api",
     "dev:website": "npm install --prefix website && npm run dev --prefix website"
   },

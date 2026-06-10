@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LocalReleaseDate } from "@/components/LocalReleaseDate";
 import {
+  DOWNLOAD_BASE_URL,
   fetchLatestVersion,
   publishedAtToIso,
   toPublicDownloadUrl,
@@ -48,7 +49,7 @@ export async function InstallGuide() {
   const latest = await fetchLatestVersion();
   const downloadUrl = latest
     ? toPublicDownloadUrl(latest)
-    : "https://storage.googleapis.com/personal-suherman-ct-mcp-studio/extensions/latest.vsix";
+    : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
   const versionLabel = latest?.version ?? "0.1.0";
   const releasedAtIso = publishedAtToIso(latest?.publishedAt);
 

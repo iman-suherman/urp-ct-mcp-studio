@@ -7,7 +7,7 @@ export const REGISTRY_API_URL =
 
 export const DOWNLOAD_BASE_URL =
   process.env.NEXT_PUBLIC_DOWNLOAD_BASE_URL?.trim() ||
-  "https://storage.googleapis.com/personal-suherman-ct-mcp-studio/extensions";
+  "https://ct-mcp-download.suherman.net/downloads";
 
 export type ReleaseNotes = {
   introduced?: string[];
@@ -44,14 +44,28 @@ export type VersionsResponse = {
   versions: PluginVersion[];
 };
 
-export function toPublicDownloadUrl(version: PluginVersion): string {
-  if (version.publicDownloadUrl) return version.publicDownloadUrl;
-  if (version.gcs?.bucket && version.gcs?.objectPath) {
-    return `https://storage.googleapis.com/${version.gcs.bucket}/${version.gcs.objectPath}`;
+function vsixFileName(version: PluginVersion): string {
+  if (version.gcs?.vsixFileName) return version.gcs.vsixFileName;
+  if (version.gcs?.objectPath) {
+    const parts = version.gcs.objectPath.split("/");
+    const last = parts[parts.length - 1];
+    if (last) return last;
   }
-  const fileName =
-    version.gcs?.vsixFileName || `${PLUGIN_ID}-${version.version}.vsix`;
-  return `${DOWNLOAD_BASE_URL}/${fileName}`;
+  if (version.publicDownloadUrl) {
+    try {
+      const parts = new URL(version.publicDownloadUrl).pathname.split("/");
+      const last = parts[parts.length - 1];
+      if (last?.endsWith(".vsix")) return last;
+    } catch {
+      /* ignore */
+    }
+  }
+  return `${PLUGIN_ID}-${version.version}.vsix`;
+}
+
+export function toPublicDownloadUrl(version: PluginVersion): string {
+  const base = DOWNLOAD_BASE_URL.replace(/\/$/, "");
+  return `${base}/${vsixFileName(version)}`;
 }
 
 export function formatBytes(bytes?: number): string {

@@ -196,6 +196,15 @@ The public site lives in `website/` and is deployed to Cloud Run:
 ```bash
 npm run dev:website      # local http://127.0.0.1:3000
 npm run deploy:website   # Cloud Run service ct-mcp-website
+npm run ci               # monitor async deploy pipeline (live dashboard)
+```
+
+After pushing `website/` changes, git hooks schedule a background deploy to Cloud Run. Track progress with `npm run ci` (same pattern as brightannica-infra). Deploy logs live under `logs/ct-mcp-website/`; state is in `logs/deployments.json`.
+
+```bash
+npm run ci -- --once                              # snapshot
+npm run deploy:retry -- --repo ct-mcp-website     # retry failed/pending
+npm run deploy:stop -- --repo ct-mcp-website      # interrupt running deploy
 ```
 
 Production URL: **[https://ct-mcp.suherman.net/](https://ct-mcp.suherman.net/)** (Cloud Run behind Cloudflare)
@@ -235,6 +244,9 @@ Each Firestore version document includes semver metadata, GCS download paths, st
 | `npm run release` | Smart release: skip if unchanged, else bump semver, build, package, upload, register |
 | `npm run deploy:registry` | Deploy Cloud Run registry API and Firestore index |
 | `npm run deploy:website` | Deploy Next.js marketing site to Cloud Run |
+| `npm run ci` | Live dashboard for local async website deploys |
+| `npm run deploy:retry` | Retry failed or pending website deploy |
+| `npm run deploy:stop` | Interrupt a running website deploy |
 | `npm run dev:registry` | Run registry API locally on port 8080 |
 | `npm run dev:website` | Run marketing website locally on port 3000 |
 

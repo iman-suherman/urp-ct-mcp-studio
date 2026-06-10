@@ -11,6 +11,10 @@ export const metadata: Metadata = {
   title: BRAND_NAME,
   description:
     "Discover, download, and manage Commerce MCP Studio extensions for commercetools.",
+  icons: {
+    icon: "/ct-mcp-logo.png",
+    apple: "/ct-mcp-logo.png",
+  },
 };
 
 export default function RootLayout({

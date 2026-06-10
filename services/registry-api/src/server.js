@@ -5,6 +5,7 @@ const {
   getPluginVersion,
   getLatestPluginVersion,
 } = require("./firestore");
+const { withPublicDownloadUrls } = require("./download-urls");
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -40,7 +41,7 @@ app.get("/api/v1/plugins/:pluginId/versions", async (req, res, next) => {
     res.json({
       pluginId: req.params.pluginId,
       count: versions.length,
-      versions,
+      versions: versions.map(withPublicDownloadUrls),
     });
   } catch (err) {
     next(err);
@@ -54,7 +55,7 @@ app.get("/api/v1/plugins/:pluginId/versions/latest", async (req, res, next) => {
       res.status(404).json({ error: "No versions found for plugin" });
       return;
     }
-    res.json(version);
+    res.json(withPublicDownloadUrls(version));
   } catch (err) {
     next(err);
   }
@@ -67,7 +68,7 @@ app.get("/api/v1/plugins/:pluginId/versions/:version", async (req, res, next) =>
       res.status(404).json({ error: "Version not found" });
       return;
     }
-    res.json(version);
+    res.json(withPublicDownloadUrls(version));
   } catch (err) {
     next(err);
   }

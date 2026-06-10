@@ -6,6 +6,8 @@ website/node_modules/
 website/.next/
 releases/*
 !releases/.gitkeep
+logs/*
+!logs/.gitkeep
 
 # Local environment (created by npm run generate-env — do not commit)
 .env

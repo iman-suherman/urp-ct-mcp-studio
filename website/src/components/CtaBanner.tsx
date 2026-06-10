@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { fetchLatestVersion, toPublicDownloadUrl } from "@/lib/registry";
+import {
+  DOWNLOAD_BASE_URL,
+  fetchLatestVersion,
+  toPublicDownloadUrl,
+} from "@/lib/registry";
 
 export async function CtaBanner() {
   const latest = await fetchLatestVersion();
   const downloadUrl = latest
     ? toPublicDownloadUrl(latest)
-    : "https://storage.googleapis.com/personal-suherman-ct-mcp-studio/extensions/latest.vsix";
+    : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
 
   return (
     <section className="mx-auto max-w-7xl px-6 pb-12">

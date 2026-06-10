@@ -7,6 +7,7 @@ const path = require("path");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
 const { getProjectAdcPath } = require("./gcp-lib-adc.cjs");
 const { loadDotenv } = require("./load-dotenv.cjs");
+const { resolveDownloadBase } = require("./public-download-url.cjs");
 
 const root = path.join(__dirname, "..");
 const websiteDir = path.join(root, "website");
@@ -47,11 +48,7 @@ function main() {
   const registryApiUrl =
     process.env.NEXT_PUBLIC_REGISTRY_API_URL?.trim() ||
     "https://ct-mcp-registry.suherman.net";
-  const downloadBase =
-    process.env.NEXT_PUBLIC_DOWNLOAD_BASE_URL?.trim() ||
-    (process.env.GCS_EXTENSION_BUCKET
-      ? `https://storage.googleapis.com/${process.env.GCS_EXTENSION_BUCKET}/extensions`
-      : `https://storage.googleapis.com/${projectId}-ct-mcp-studio/extensions`);
+  const downloadBase = resolveDownloadBase();
 
   console.log(`deploy:website: deploying ${serviceName} to Cloud Run (${region})…`);
   run("gcloud", [
