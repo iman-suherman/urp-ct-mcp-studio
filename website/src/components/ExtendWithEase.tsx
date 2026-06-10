@@ -1,9 +1,10 @@
 import Image from "next/image";
+import { BRAND_NAME } from "@/lib/brand";
 
 const highlights = [
   {
     title: "Install",
-    description: "Add CT MCP extensions instantly via VSIX.",
+    description: `Add ${BRAND_NAME} instantly via VSIX.`,
     icon: "🧩",
     tint: "bg-brand-purple/10 text-brand-purple",
   },
@@ -55,7 +56,7 @@ export function ExtendWithEase() {
           <div className="card relative overflow-hidden p-3 shadow-card">
             <Image
               src="/extend-with-ease.png"
-              alt="CT MCP Tools Explorer with commercetools connection dialog"
+              alt={`${BRAND_NAME} Tools Explorer with commercetools connection dialog`}
               width={1200}
               height={900}
               className="h-auto w-full rounded-xl"

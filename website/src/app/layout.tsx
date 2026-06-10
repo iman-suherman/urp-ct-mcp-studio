@@ -3,11 +3,12 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { BRAND_NAME } from "@/lib/brand";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "CT MCP — Commerce MCP Extensions",
+  title: BRAND_NAME,
   description:
     "Discover, download, and manage Commerce MCP Studio extensions for commercetools.",
 };

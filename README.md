@@ -4,18 +4,17 @@ VS Code extension for configuring, exploring, testing, and using [Commerce MCP](
 
 Instead of hand-editing MCP JSON, use the **Commerce MCP** side panel to manage connections, discover tools dynamically, run tools in a playground, and sync configuration into VS Code Chat.
 
+**Download:** pre-built VSIX packages and release history are available at **[ct-mcp.suherman.net](https://ct-mcp.suherman.net/)**.
+
 > **Install the extension**
 >
-> From the repository root, build and package the VSIX, then install it:
+> Download the latest VSIX from **[CT MCP](https://ct-mcp.suherman.net/)** — browse [release history](https://ct-mcp.suherman.net/) and pick a version, or use **Download latest VSIX**.
 >
-> ```bash
-> npm install && npm run build && npm run package
-> code --install-extension ct-mcp-studio-0.1.0.vsix
-> ```
->
-> Or in VS Code: open **Extensions** → click **⋯** → **Install from VSIX…** → select `ct-mcp-studio-0.1.0.vsix`.
+> In VS Code: open **Extensions** → click **⋯** → **Install from VSIX…** → select the downloaded `.vsix` file.
 >
 > Reload the window (**Developer: Reload Window**) if prompted, then click the **Commerce MCP** icon in the Activity Bar.
+>
+> Building from source? See [Install the extension](#install-the-extension) below.
 
 ## Prerequisites
 
@@ -199,11 +198,9 @@ npm run dev:website      # local http://127.0.0.1:3000
 npm run deploy:website   # Cloud Run service ct-mcp-website
 ```
 
-Production URL (Cloud Run): `https://ct-mcp-website-303349212787.australia-southeast1.run.app`
+Production URL: **[https://ct-mcp.suherman.net/](https://ct-mcp.suherman.net/)** (Cloud Run behind Cloudflare)
 
-The site reads version history from `https://ct-mcp-registry.suherman.net` and links VSIX downloads from GCS (`NEXT_PUBLIC_DOWNLOAD_BASE_URL` in `.env.example`).
-
-Point a Cloudflare subdomain at the website Cloud Run service the same way as the registry API when ready.
+The site reads version history from `https://ct-mcp-registry.suherman.net` and links VSIX downloads from GCS (`NEXT_PUBLIC_DOWNLOAD_BASE_URL` in `.env.example`). End users should download from the website rather than building locally.
 
 #### Registry API endpoints
 
@@ -269,7 +266,23 @@ npm run watch
 
 ## Install the extension
 
-### Option 1 — Run from source (development)
+### Option 1 — Download from CT MCP (recommended)
+
+The easiest way to install Commerce MCP Studio:
+
+1. Open **[https://ct-mcp.suherman.net/](https://ct-mcp.suherman.net/)**.
+2. Click **Download latest VSIX**, or open **Versions** to pick a specific release.
+3. In VS Code: **Extensions** → **⋯** → **Install from VSIX…** → select the downloaded file.
+4. Reload the window (**Developer: Reload Window**) if prompted.
+5. Click the **Commerce MCP** icon in the Activity Bar.
+
+You can also install from the CLI after downloading:
+
+```bash
+code --install-extension ~/Downloads/ct-mcp-studio-0.1.0.vsix
+```
+
+### Option 2 — Run from source (development)
 
 Best for local development and debugging.
 
@@ -280,7 +293,7 @@ Best for local development and debugging.
 
 The launch configuration is in `.vscode/launch.json`.
 
-### Option 2 — Install from a VSIX package
+### Option 3 — Build and install a VSIX locally
 
 Package the extension for installation in any VS Code instance:
 
@@ -300,7 +313,9 @@ Or in VS Code: **Extensions** view → **⋯** menu → **Install from VSIX…**
 
 Reload the window (**Developer: Reload Window**) after installing.
 
-### Option 3 — Install from folder (advanced)
+Prefer a pre-built release? Use [CT MCP](https://ct-mcp.suherman.net/) instead of building yourself.
+
+### Option 4 — Install from folder (advanced)
 
 Copy or symlink the built extension into your VS Code extensions directory:
 

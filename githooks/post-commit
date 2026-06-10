@@ -1,5 +1,5 @@
 #!/bin/bash
-# Auto-correct commit author, then schedule async ct-mcp plugin release check.
+# Auto-correct commit author, then schedule async plugin release and website deploy checks.
 
 repo_root=$(git rev-parse --show-toplevel)
 
@@ -13,9 +13,14 @@ fi
 
 if [ "${CT_MCP_POST_COMMIT_RELEASE:-1}" != "0" ]; then
   log_file="$repo_root/.git/post-commit-release.log"
-  (
-    node "$repo_root/scripts/post-commit-release.cjs" >> "$log_file" 2>&1
-  ) &
+  nohup node "$repo_root/scripts/post-commit-release.cjs" >> "$log_file" 2>&1 &
+  disown
+fi
+
+if [ "${CT_MCP_POST_COMMIT_WEBSITE:-1}" != "0" ]; then
+  log_file="$repo_root/.git/post-commit-website.log"
+  nohup node "$repo_root/scripts/post-commit-website.cjs" >> "$log_file" 2>&1 &
+  disown
 fi
 
 exit 0

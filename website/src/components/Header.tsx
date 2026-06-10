@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import { BRAND_NAME } from "@/lib/brand";
 
 const nav = [
   { href: "#home", label: "Home" },
   { href: "#download", label: "Download" },
   { href: "#versions", label: "Versions" },
-  { href: "#features", label: "Features" },
+  { href: "#extend", label: "Features" },
   {
     href: "https://docs.commercetools.com/dev-tooling/mcp/commerce-mcp",
     label: "Documentation",
@@ -23,13 +24,10 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-3">
-          <Image src="/logo.png" alt="CT MCP" width={40} height={40} priority />
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-bold tracking-tight text-slate-900">CT MCP</span>
-            <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-xs font-medium text-brand-purple">
-              Plugins
-            </span>
-          </div>
+          <Image src="/logo.png" alt={BRAND_NAME} width={40} height={40} priority />
+          <span className="max-w-[11rem] text-sm font-bold leading-snug tracking-tight text-slate-900 sm:max-w-xs sm:text-base lg:max-w-md lg:text-lg">
+            {BRAND_NAME}
+          </span>
         </Link>
 
         <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">

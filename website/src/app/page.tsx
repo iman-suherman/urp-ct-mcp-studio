@@ -1,18 +1,20 @@
 import { CtaBanner } from "@/components/CtaBanner";
+import { DeveloperFriendly } from "@/components/DeveloperFriendly";
 import { ExtendWithEase } from "@/components/ExtendWithEase";
-import { Features } from "@/components/Features";
 import { SecureByDesign } from "@/components/SecureByDesign";
 import { Hero } from "@/components/Hero";
 import { VersionHistory } from "@/components/VersionHistory";
+import { VersionHistoryShowcase } from "@/components/VersionHistoryShowcase";
 
 export default function HomePage() {
   return (
     <>
       <Hero />
-      <VersionHistory />
       <ExtendWithEase />
       <SecureByDesign />
-      <Features />
+      <DeveloperFriendly />
+      <VersionHistoryShowcase />
+      <VersionHistory />
       <CtaBanner />
     </>
   );

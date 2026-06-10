@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { BRAND_NAME } from "@/lib/brand";
 
 const highlights = [
   {
@@ -37,7 +38,7 @@ export function SecureByDesign() {
           <div className="card relative overflow-hidden p-3 shadow-card">
             <Image
               src="/secure-by-design.png"
-              alt="CT MCP connection details with VS Code Secret Storage and local stdio architecture"
+              alt={`${BRAND_NAME} connection details with VS Code Secret Storage and local stdio architecture`}
               width={1200}
               height={900}
               className="h-auto w-full rounded-xl"
