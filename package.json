@@ -2,9 +2,9 @@
   "name": "ct-mcp-studio",
   "displayName": "Commerce MCP Studio",
   "description": "Configure, explore, test, and use Commerce MCP servers with commercetools projects.",
-  "version": "0.1.0",
-  "publisher": "qantas",
-  "icon": "media/logo.png",
+  "version": "0.1.1",
+  "publisher": "Suherman",
+  "icon": "media/ct-mcp-logo.png",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -63,7 +63,7 @@
         {
           "id": "ct-mcp-studio",
           "title": "Commerce MCP",
-          "icon": "media/logo.png"
+          "icon": "media/ct-mcp-logo.png"
         }
       ]
     },
@@ -74,7 +74,7 @@
           "id": "ctMcp.studio",
           "name": "Commerce MCP",
           "contextualTitle": "Commerce MCP Studio",
-          "icon": "media/logo.png"
+          "icon": "media/ct-mcp-logo.png"
         }
       ]
     },
