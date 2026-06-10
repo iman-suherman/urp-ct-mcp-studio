@@ -8,9 +8,9 @@ export async function CtaBanner() {
     : "https://storage.googleapis.com/personal-suherman-ct-mcp-studio/extensions/latest.vsix";
 
   return (
-    <section className="mx-auto max-w-7xl px-6 pb-20">
-      <div className="rounded-[2rem] bg-gradient-to-r from-brand-purple to-brand-violet px-8 py-10 text-white shadow-card md:px-12">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+    <section className="mx-auto max-w-7xl px-6 pb-12">
+      <div className="rounded-[2rem] bg-gradient-to-r from-brand-purple to-brand-violet px-8 py-8 text-white shadow-card md:px-10">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-2xl font-bold md:text-3xl">
               Ready to supercharge your Commerce MCP experience?

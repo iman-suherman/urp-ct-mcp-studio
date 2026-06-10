@@ -31,8 +31,8 @@ const securityChecks = [
 
 export function SecureByDesign() {
   return (
-    <section id="security" className="mx-auto max-w-7xl px-6 py-20">
-      <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+    <section id="security" className="mx-auto max-w-7xl px-6 py-12">
+      <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
         <div className="relative lg:order-1">
           <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-teal/20 via-brand-purple/10 to-transparent blur-2xl" />
           <div className="card relative overflow-hidden p-3 shadow-card">
@@ -54,7 +54,7 @@ export function SecureByDesign() {
             Credentials stay in VS Code Secret Storage while MCP servers run locally over stdio.
           </h2>
 
-          <ul className="mt-10 space-y-6">
+          <ul className="mt-6 space-y-4">
             {highlights.map((item) => (
               <li key={item.title} className="flex gap-4">
                 <div
@@ -70,12 +70,12 @@ export function SecureByDesign() {
             ))}
           </ul>
 
-          <p className="mt-8 inline-flex items-center gap-2 rounded-full bg-brand-teal/10 px-4 py-2 text-sm font-medium text-brand-teal">
+          <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand-teal/10 px-4 py-2 text-sm font-medium text-brand-teal">
             <span aria-hidden>🛡️</span>
             Built with security and privacy in mind.
           </p>
 
-          <div className="mt-8 rounded-2xl border border-brand-teal/20 bg-brand-teal/5 p-5">
+          <div className="mt-6 rounded-2xl border border-brand-teal/20 bg-brand-teal/5 p-5">
             <p className="flex items-center gap-2 text-sm font-semibold text-brand-teal">
               <span aria-hidden>🛡️</span>
               Security First

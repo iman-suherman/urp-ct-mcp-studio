@@ -70,9 +70,13 @@ function resolvePrefix() {
   return prefix.replace(/^\/+|\/+$/g, "");
 }
 
+function resolveReleasesDir() {
+  return path.join(root, "releases");
+}
+
 function resolveVsixPath(packageJson, version) {
   const vsixName = `${packageJson.name}-${version}.vsix`;
-  const vsixPath = path.join(root, vsixName);
+  const vsixPath = path.join(resolveReleasesDir(), vsixName);
   if (fs.existsSync(vsixPath)) return vsixPath;
 
   console.log("upload: VSIX not found — running npm run package…");

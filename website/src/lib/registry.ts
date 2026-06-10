@@ -72,6 +72,17 @@ export function formatDate(value?: PluginVersion["publishedAt"]): string {
   return new Date(seconds * 1000).toLocaleDateString();
 }
 
+export function publishedAtToIso(value?: PluginVersion["publishedAt"]): string | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  const seconds = value._seconds ?? value.seconds;
+  if (!seconds) return null;
+  return new Date(seconds * 1000).toISOString();
+}
+
 async function fetchJson<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${REGISTRY_API_URL}${path}`, {

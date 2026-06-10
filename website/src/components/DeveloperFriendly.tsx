@@ -52,8 +52,8 @@ const footerHighlights = [
 
 export function DeveloperFriendly() {
   return (
-    <section id="developer" className="mx-auto max-w-7xl px-6 py-20">
-      <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+    <section id="developer" className="mx-auto max-w-7xl px-6 py-12">
+      <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-brand-purple">
             Developer Friendly
@@ -62,7 +62,7 @@ export function DeveloperFriendly() {
             Browse tools dynamically, run MCP calls in a playground, and sync native VS Code Chat config.
           </h2>
 
-          <ul className="mt-10 space-y-6">
+          <ul className="mt-6 space-y-4">
             {highlights.map((item) => (
               <li key={item.title} className="flex gap-4">
                 <div
@@ -93,7 +93,7 @@ export function DeveloperFriendly() {
         </div>
       </div>
 
-      <div className="mt-16">
+      <div className="mt-10">
         <p className="text-sm font-semibold uppercase tracking-wide text-brand-purple">
           Sync to VS Code Chat
         </p>
@@ -101,7 +101,7 @@ export function DeveloperFriendly() {
           Automatically add and manage your MCP server in VS Code Chat configuration.
         </p>
 
-        <ol className="mt-8 grid gap-4 md:grid-cols-3">
+        <ol className="mt-6 grid gap-4 md:grid-cols-3">
           {syncSteps.map((step, index) => (
             <li key={step.title} className="card p-5">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-purple/10 text-sm font-bold text-brand-purple">
@@ -114,7 +114,7 @@ export function DeveloperFriendly() {
         </ol>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {footerHighlights.map((item) => (
           <div
             key={item.title}

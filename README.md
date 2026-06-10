@@ -66,12 +66,12 @@ npm run watch
 npm run package
 ```
 
-Creates `ct-mcp-studio-<version>.vsix` at the repo root (version from `package.json`).
+Creates `releases/ct-mcp-studio-<version>.vsix` (version from `package.json`).
 
 Install locally:
 
 ```bash
-code --install-extension ct-mcp-studio-0.1.0.vsix
+code --install-extension releases/ct-mcp-studio-0.1.0.vsix
 ```
 
 Or in VS Code: **Extensions** → **⋯** → **Install from VSIX…**
@@ -227,7 +227,7 @@ Each Firestore version document includes semver metadata, GCS download paths, st
 |--------|-------------|
 | `npm run build` | Compile TypeScript (`src/` → `out/`) |
 | `npm run watch` | Recompile on file changes |
-| `npm run package` | Create `.vsix` with `@vscode/vsce` |
+| `npm run package` | Create `releases/*.vsix` with `@vscode/vsce` |
 | `npm run generate-env` | Copy `.env.example` → `.env` (use `-- --force` to overwrite) |
 | `npm run login` | GCP ADC login, project selection, sync `.gcloud/`, update `.env` |
 | `npm run release-notes` | Generate semver release notes from git commits |
@@ -301,15 +301,15 @@ Package the extension for installation in any VS Code instance:
 npm install && npm run build && npm run package
 ```
 
-This creates `ct-mcp-studio-0.1.0.vsix` (version from `package.json`).
+This creates `releases/ct-mcp-studio-0.1.0.vsix` (version from `package.json`).
 
 Install the package:
 
 ```bash
-code --install-extension ct-mcp-studio-0.1.0.vsix
+code --install-extension releases/ct-mcp-studio-0.1.0.vsix
 ```
 
-Or in VS Code: **Extensions** view → **⋯** menu → **Install from VSIX…** → select the `.vsix` file.
+Or in VS Code: **Extensions** view → **⋯** menu → **Install from VSIX…** → select the `.vsix` file from `releases/`.
 
 Reload the window (**Developer: Reload Window**) after installing.
 
@@ -426,7 +426,7 @@ ct-mcp-studio/
 │   └── registry-api/     # Cloud Run API for version history (Firestore)
 ├── firestore/
 │   └── indexes.json      # Composite index for version queries
-├── releases/             # Generated release notes (gitignored)
+├── releases/             # VSIX builds and release notes (contents gitignored; .gitkeep tracked)
 ├── media/logo.png        # Extension branding
 ├── ct-mcp-studio.json    # Bundled defaults
 ├── .env.example          # Environment template (copy via generate-env)

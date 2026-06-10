@@ -24,8 +24,8 @@ const highlights = [
 
 export function ExtendWithEase() {
   return (
-    <section id="extend" className="mx-auto max-w-7xl px-6 py-20">
-      <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+    <section id="extend" className="mx-auto max-w-7xl px-6 py-12">
+      <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-brand-purple">
             Extend with Ease
@@ -34,7 +34,7 @@ export function ExtendWithEase() {
             Install VSIX packages and connect Commerce MCP to your commercetools projects in minutes.
           </h2>
 
-          <ul className="mt-10 space-y-6">
+          <ul className="mt-6 space-y-4">
             {highlights.map((item) => (
               <li key={item.title} className="flex gap-4">
                 <div

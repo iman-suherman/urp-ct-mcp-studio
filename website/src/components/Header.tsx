@@ -3,10 +3,11 @@ import Link from "next/link";
 import { BRAND_NAME } from "@/lib/brand";
 
 const nav = [
-  { href: "#home", label: "Home" },
-  { href: "#download", label: "Download" },
-  { href: "#versions", label: "Versions" },
-  { href: "#extend", label: "Features" },
+  { href: "/", label: "Home" },
+  { href: "/install", label: "Install" },
+  { href: "/#download", label: "Download" },
+  { href: "/#versions", label: "Versions" },
+  { href: "/#extend", label: "Features" },
   {
     href: "https://docs.commercetools.com/dev-tooling/mcp/commerce-mcp",
     label: "Documentation",
@@ -43,16 +44,16 @@ export function Header() {
                 {item.label}
               </a>
             ) : (
-              <a key={item.href} href={item.href} className="transition hover:text-brand-purple">
+              <Link key={item.href} href={item.href} className="transition hover:text-brand-purple">
                 {item.label}
-              </a>
+              </Link>
             )
           )}
         </nav>
 
-        <a href="#download" className="btn-primary hidden sm:inline-flex">
+        <Link href="/install" className="btn-primary hidden sm:inline-flex">
           Get Started
-        </a>
+        </Link>
       </div>
     </header>
   );

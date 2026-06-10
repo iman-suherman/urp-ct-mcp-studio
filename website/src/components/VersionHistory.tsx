@@ -10,7 +10,7 @@ export async function VersionHistory() {
   const versions = await fetchAllVersions();
 
   return (
-    <section id="versions" className="mx-auto max-w-7xl px-6 py-20">
+    <section id="versions" className="mx-auto max-w-7xl px-6 py-12">
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-brand-purple">
           All releases
@@ -22,11 +22,11 @@ export async function VersionHistory() {
       </div>
 
       {versions.length === 0 ? (
-        <div className="card mt-8 p-8 text-center text-slate-600">
+        <div className="card mt-6 p-8 text-center text-slate-600">
           No releases are available yet. Check back soon for the first download.
         </div>
       ) : (
-        <div className="mt-8 space-y-4">
+        <div className="mt-6 space-y-4">
           {versions.map((version, index) => {
             const notes = flattenReleaseNotes(version.releaseNotes).slice(0, 4);
             return (

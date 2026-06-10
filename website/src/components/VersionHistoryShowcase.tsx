@@ -24,8 +24,8 @@ const highlights = [
 
 export function VersionHistoryShowcase() {
   return (
-    <section id="version-history" className="mx-auto max-w-7xl px-6 py-20">
-      <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+    <section id="version-history" className="mx-auto max-w-7xl px-6 py-12">
+      <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
         <div className="relative lg:order-1">
           <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-blue/20 via-brand-teal/10 to-transparent blur-2xl" />
           <div className="card relative overflow-hidden p-3 shadow-card">
@@ -46,12 +46,12 @@ export function VersionHistoryShowcase() {
           <h2 className="mt-3 text-3xl font-bold text-slate-900 md:text-4xl">
             Every release is tracked with clear version notes and downloadable packages.
           </h2>
-          <p className="mt-4 text-base leading-7 text-slate-600">
+          <p className="mt-3 text-base leading-7 text-slate-600">
             See how our tools are evolving. Look back at every update, read what changed, and
             download the version that works best for you.
           </p>
 
-          <ul className="mt-10 space-y-6">
+          <ul className="mt-6 space-y-4">
             {highlights.map((item) => (
               <li key={item.title} className="flex gap-4">
                 <div
@@ -67,12 +67,12 @@ export function VersionHistoryShowcase() {
             ))}
           </ul>
 
-          <p className="mt-8 inline-flex items-center gap-2 rounded-full bg-brand-purple/10 px-4 py-2 text-sm font-medium text-brand-purple">
+          <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand-purple/10 px-4 py-2 text-sm font-medium text-brand-purple">
             <span aria-hidden>🛡️</span>
             Reliable releases. Transparent updates. Always in control.
           </p>
 
-          <p className="mt-6 text-sm text-slate-600">
+          <p className="mt-4 text-sm text-slate-600">
             Need an older version?{" "}
             <Link href="#versions" className="font-semibold text-brand-purple hover:underline">
               All previous releases are available for download.

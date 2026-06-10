@@ -4,7 +4,8 @@ out/
 .DS_Store
 website/node_modules/
 website/.next/
-releases/
+releases/*
+!releases/.gitkeep
 
 # Local environment (created by npm run generate-env — do not commit)
 .env
