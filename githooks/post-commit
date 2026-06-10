@@ -1,0 +1,21 @@
+#!/bin/bash
+# Auto-correct commit author, then schedule async ct-mcp plugin release check.
+
+repo_root=$(git rev-parse --show-toplevel)
+
+author_email=$(git log -1 --format="%ae")
+if [ "$author_email" != "iman.suherman@gmail.com" ]; then
+  export GIT_COMMITTER_NAME="Iman Suherman"
+  export GIT_COMMITTER_EMAIL="iman.suherman@gmail.com"
+  git commit --amend --author="Iman Suherman <iman.suherman@gmail.com>" --no-edit --no-verify
+  exit 0
+fi
+
+if [ "${CT_MCP_POST_COMMIT_RELEASE:-1}" != "0" ]; then
+  log_file="$repo_root/.git/post-commit-release.log"
+  (
+    node "$repo_root/scripts/post-commit-release.cjs" >> "$log_file" 2>&1
+  ) &
+fi
+
+exit 0

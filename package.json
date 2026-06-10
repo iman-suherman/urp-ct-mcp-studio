@@ -5,11 +5,17 @@
   "version": "0.1.0",
   "publisher": "qantas",
   "icon": "media/logo.png",
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iman-suherman/urp-ct-mcp-studio.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
     "onStartupFinished",
     "onView:ctMcp.studio",
@@ -24,14 +30,27 @@
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
     "prebuild": "npm run clean",
-    "watch": "tsc -watch -p tsconfig.json"
+    "watch": "tsc -watch -p tsconfig.json",
+    "package": "vsce package",
+    "login": "node scripts/gcp-adc-login.cjs",
+    "generate-env": "node scripts/generate-env.cjs",
+    "upload": "node scripts/upload-extension.cjs",
+    "release": "node scripts/release.cjs",
+    "install-hooks": "node scripts/install-git-hooks.cjs",
+    "release-notes": "node scripts/generate-release-notes.cjs",
+    "deploy:registry": "node scripts/deploy-registry-api.cjs",
+    "deploy:website": "node scripts/deploy-website.cjs",
+    "dev:registry": "npm install --prefix services/registry-api && npm run dev --prefix services/registry-api",
+    "dev:website": "npm install --prefix website && npm run dev --prefix website"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1"
   },
   "devDependencies": {
+    "@google-cloud/firestore": "^8.6.0",
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
     "typescript": "^5.7.2"
   },
   "contributes": {
@@ -113,11 +132,26 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "ctMcp.openStudio", "when": "true" },
-        { "command": "ctMcp.openExplorer", "when": "true" },
-        { "command": "ctMcp.connect", "when": "true" },
-        { "command": "ctMcp.disconnect", "when": "true" },
-        { "command": "ctMcp.refresh", "when": "true" }
+        {
+          "command": "ctMcp.openStudio",
+          "when": "true"
+        },
+        {
+          "command": "ctMcp.openExplorer",
+          "when": "true"
+        },
+        {
+          "command": "ctMcp.connect",
+          "when": "true"
+        },
+        {
+          "command": "ctMcp.disconnect",
+          "when": "true"
+        },
+        {
+          "command": "ctMcp.refresh",
+          "when": "true"
+        }
       ]
     }
   }

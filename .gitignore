@@ -2,6 +2,15 @@ node_modules/
 out/
 *.vsix
 .DS_Store
+website/node_modules/
+website/.next/
+releases/
+
+# Local environment (created by npm run generate-env — do not commit)
+.env
+
+# Project-local Google ADC (created by npm run login — do not commit)
+.gcloud/application_default_credentials.json
 
 # Cursor IDE rules (local only)
 .cursor/rules/

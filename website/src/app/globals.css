@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8faff;
+  --foreground: #0f172a;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--foreground);
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 24%),
+    var(--background);
+  min-height: 100vh;
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, #6366f1 0%, #7c3aed 55%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.card {
+  @apply rounded-2xl border border-white/70 bg-white/90 shadow-soft backdrop-blur;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl bg-brand-purple px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-violet;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-brand-purple/30 hover:text-brand-purple;
+}
+
+.btn-cta-primary {
+  @apply flex h-11 w-full items-center justify-center whitespace-nowrap rounded-xl border border-transparent bg-white px-5 text-sm font-semibold text-brand-purple transition hover:bg-indigo-50;
+}
+
+.btn-cta-secondary {
+  @apply flex h-11 w-full items-center justify-center whitespace-nowrap rounded-xl border border-white/30 px-5 text-sm font-semibold text-white transition hover:bg-white/10;
+}

@@ -1,0 +1,21 @@
+# Cloud Run reference manifest for ct-mcp-registry-api
+# Deploy with: npm run deploy:registry
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ct-mcp-registry-api
+spec:
+  template:
+    spec:
+      containers:
+        - image: gcr.io/{GCP_PROJECT_ID}/ct-mcp-registry-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GCP_PROJECT_ID
+              value: "{GCP_PROJECT_ID}"
+            - name: FIRESTORE_PLUGIN_COLLECTION
+              value: mcp_plugin_versions
+            - name: FIRESTORE_PLUGIN_CATALOG
+              value: mcp_plugin_catalog

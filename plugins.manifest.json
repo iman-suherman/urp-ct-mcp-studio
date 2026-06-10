@@ -1,0 +1,16 @@
+{
+  "plugins": [
+    {
+      "pluginId": "ct-mcp-studio",
+      "watchPaths": [
+        "src/",
+        "media/",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "ct-mcp-studio.json",
+        ".vscodeignore"
+      ]
+    }
+  ]
+}
