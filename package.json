@@ -1,0 +1,124 @@
+{
+  "name": "ct-mcp-studio",
+  "displayName": "Commerce MCP Studio",
+  "description": "Configure, explore, test, and use Commerce MCP servers with commercetools projects.",
+  "version": "0.1.0",
+  "publisher": "qantas",
+  "icon": "media/logo.png",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:ctMcp.studio",
+    "onCommand:ctMcp.openStudio",
+    "onCommand:ctMcp.openExplorer",
+    "onCommand:ctMcp.connect",
+    "onCommand:ctMcp.disconnect",
+    "onCommand:ctMcp.refresh"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
+    "prebuild": "npm run clean",
+    "watch": "tsc -watch -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.7.2"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ct-mcp-studio",
+          "title": "Commerce MCP",
+          "icon": "media/logo.png"
+        }
+      ]
+    },
+    "views": {
+      "ct-mcp-studio": [
+        {
+          "type": "webview",
+          "id": "ctMcp.studio",
+          "name": "Commerce MCP",
+          "contextualTitle": "Commerce MCP Studio",
+          "icon": "media/logo.png"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Commerce MCP Studio",
+      "properties": {
+        "ctMcp.autoConnectOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reconnect to the last active Commerce MCP connection on startup."
+        },
+        "ctMcp.syncNativeMcpConfig": {
+          "type": "boolean",
+          "default": true,
+          "description": "Sync the active connection into VS Code native mcp.servers for Chat integration."
+        },
+        "ctMcp.dynamicToolLoadingThreshold": {
+          "type": "number",
+          "default": 450,
+          "description": "Number of Commerce MCP tools to inject when using --tools=all."
+        },
+        "ctMcp.commerceMcpPackage": {
+          "type": "string",
+          "default": "@commercetools/commerce-mcp@latest",
+          "description": "npm package used to spawn the Commerce MCP server."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "ctMcp.openStudio",
+        "title": "Open Commerce MCP Studio",
+        "category": "Commerce MCP",
+        "icon": "$(server)"
+      },
+      {
+        "command": "ctMcp.openExplorer",
+        "title": "Open MCP Explorer",
+        "category": "Commerce MCP",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "ctMcp.connect",
+        "title": "Connect Commerce MCP",
+        "category": "Commerce MCP",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "ctMcp.disconnect",
+        "title": "Disconnect Commerce MCP",
+        "category": "Commerce MCP"
+      },
+      {
+        "command": "ctMcp.refresh",
+        "title": "Refresh Commerce MCP",
+        "category": "Commerce MCP",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "ctMcp.openStudio", "when": "true" },
+        { "command": "ctMcp.openExplorer", "when": "true" },
+        { "command": "ctMcp.connect", "when": "true" },
+        { "command": "ctMcp.disconnect", "when": "true" },
+        { "command": "ctMcp.refresh", "when": "true" }
+      ]
+    }
+  }
+}

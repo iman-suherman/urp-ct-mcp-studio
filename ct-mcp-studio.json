@@ -1,0 +1,5 @@
+{
+  "defaultAuthUrl": "https://auth.europe-west1.gcp.commercetools.com",
+  "defaultApiUrl": "https://api.europe-west1.gcp.commercetools.com",
+  "nativeMcpServerId": "commerce-mcp"
+}
