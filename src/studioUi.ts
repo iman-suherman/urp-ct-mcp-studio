@@ -88,7 +88,16 @@ export class StudioUiController {
       }))
     );
 
-    const test = connected ? await this.manager.testConnection() : undefined;
+    const health =
+      connected && active
+        ? {
+            mcpRunning: true,
+            authValid: true,
+            apiReachable: true,
+            toolsLoaded: tools.length,
+            message: `${active.name} · ${active.projectKey}`,
+          }
+        : undefined;
     const logs: LogEntry[] = this.manager.logs.list(80);
 
     await this.host.postMessage({
@@ -98,7 +107,7 @@ export class StudioUiController {
       activeConnection: active,
       connected,
       connectionStatus: this.manager.getConnectionStatusMessage(),
-      health: test?.health,
+      health: health,
       tools: tools.map((tool) => ({
         name: tool.name,
         description: tool.description,

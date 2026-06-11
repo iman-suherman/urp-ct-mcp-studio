@@ -2,7 +2,7 @@ import { EventEmitter } from "events";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { MCPConnection, MCPTool } from "./types";
-import { buildCommerceMcpArgs } from "./mcpBootstrap";
+import { MCP_REQUEST_TIMEOUT_MS, resolveCommerceMcpSpawn } from "./mcpBootstrap";
 
 export interface McpSessionInfo {
   connectionId: string;
@@ -10,12 +10,21 @@ export interface McpSessionInfo {
   projectKey: string;
 }
 
+const MCP_REQUEST_OPTIONS = {
+  timeout: MCP_REQUEST_TIMEOUT_MS,
+  resetTimeoutOnProgress: true,
+} as const;
+
 export class McpProcessManager extends EventEmitter {
   private client: Client | undefined;
   private transport: StdioClientTransport | undefined;
   private session: McpSessionInfo | undefined;
   private tools: MCPTool[] = [];
   private connecting = false;
+
+  constructor(private readonly extensionPath?: string) {
+    super();
+  }
 
   get isConnected(): boolean {
     return Boolean(this.client && this.session);
@@ -38,10 +47,12 @@ export class McpProcessManager extends EventEmitter {
     try {
       await this.disconnect();
 
+      const spawn = resolveCommerceMcpSpawn(connection, clientSecret, this.extensionPath);
       const transport = new StdioClientTransport({
-        command: "npx",
-        args: buildCommerceMcpArgs(connection, clientSecret),
+        command: spawn.command,
+        args: spawn.args,
         stderr: "pipe",
+        env: spawn.env,
       });
 
       const client = new Client(
@@ -56,9 +67,9 @@ export class McpProcessManager extends EventEmitter {
         }
       });
 
-      await client.connect(transport);
+      await client.connect(transport, MCP_REQUEST_OPTIONS);
 
-      const listed = await client.listTools();
+      const listed = await client.listTools({}, MCP_REQUEST_OPTIONS);
       this.tools = listed.tools.map((tool) => ({
         name: tool.name,
         description: tool.description,
@@ -110,7 +121,7 @@ export class McpProcessManager extends EventEmitter {
       return [];
     }
 
-    const listed = await this.client.listTools();
+    const listed = await this.client.listTools({}, MCP_REQUEST_OPTIONS);
     this.tools = listed.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -124,7 +135,7 @@ export class McpProcessManager extends EventEmitter {
       throw new Error("Commerce MCP is not connected.");
     }
 
-    const result = await this.client.callTool({ name, arguments: args });
+    const result = await this.client.callTool({ name, arguments: args }, undefined, MCP_REQUEST_OPTIONS);
     const content = Array.isArray(result.content)
       ? (result.content as Array<{ type?: string; text?: string }>)
       : [];

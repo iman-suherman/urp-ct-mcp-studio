@@ -17,7 +17,7 @@ import {
 } from "./types";
 
 export class CommerceMcpManager {
-  private readonly processManager = new McpProcessManager();
+  private readonly processManager: McpProcessManager;
   readonly logs = new LogStore();
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changeEmitter.event;
@@ -26,6 +26,7 @@ export class CommerceMcpManager {
     private readonly context: vscode.ExtensionContext,
     private readonly store: ConnectionStore
   ) {
+    this.processManager = new McpProcessManager(context.extensionPath);
     this.processManager.on("log", (message: string) => {
       this.logs.info(message);
       this.notifyChanged();
@@ -133,7 +134,11 @@ export class CommerceMcpManager {
             health,
           };
         } catch (err) {
-          const text = err instanceof Error ? err.message : String(err);
+          let text = err instanceof Error ? err.message : String(err);
+          if (text.includes("Request timed out") || text.includes("-32001")) {
+            text =
+              "Commerce MCP took too long to start. Reload the window and try again — first connect can take up to 3 minutes while tools load.";
+          }
           await this.context.globalState.update(
             GLOBAL_CONNECTION_STATUS_KEY,
             `Connection failed: ${text}`

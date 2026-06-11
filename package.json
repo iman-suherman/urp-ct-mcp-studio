@@ -48,6 +48,7 @@
     "dev:website": "npm install --prefix website && npm run dev --prefix website"
   },
   "dependencies": {
+    "@commercetools/commerce-mcp": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.12.1"
   },
   "devDependencies": {
