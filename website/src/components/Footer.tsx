@@ -44,7 +44,7 @@ export function Footer() {
             <Link href="/versions" className="hover:text-brand-purple">
               Versions
             </Link>
-            <Link href="/#download" className="hover:text-brand-purple">
+            <Link href="/versions" className="hover:text-brand-purple">
               Download
             </Link>
             <a href={GITHUB_REPO} target="_blank" rel="noreferrer" className="hover:text-brand-purple">

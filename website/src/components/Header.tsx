@@ -8,7 +8,7 @@ import { BRAND_NAME } from "@/lib/brand";
 const nav = [
   { href: "/", label: "Home" },
   { href: "/install", label: "Install" },
-  { href: "/#download", label: "Download" },
+  { href: "/versions", label: "Download" },
   { href: "/versions", label: "Versions" },
   { href: "/#extend", label: "Features" },
   {
