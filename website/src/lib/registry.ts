@@ -75,15 +75,25 @@ export function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const RELEASE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+};
+
 export function formatDate(value?: PluginVersion["publishedAt"]): string {
   if (!value) return "—";
+  let date: Date;
   if (typeof value === "string") {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
+    date = new Date(value);
+  } else {
+    const seconds = value._seconds ?? value.seconds;
+    if (!seconds) return "—";
+    date = new Date(seconds * 1000);
   }
-  const seconds = value._seconds ?? value.seconds;
-  if (!seconds) return "—";
-  return new Date(seconds * 1000).toLocaleDateString();
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleDateString("en-GB", RELEASE_DATE_FORMAT);
 }
 
 export function publishedAtToIso(value?: PluginVersion["publishedAt"]): string | null {
