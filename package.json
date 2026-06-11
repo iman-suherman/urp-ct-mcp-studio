@@ -21,6 +21,7 @@
     "onView:ctMcp.studio",
     "onCommand:ctMcp.openStudio",
     "onCommand:ctMcp.openExplorer",
+    "onCommand:ctMcp.openNavigator",
     "onCommand:ctMcp.connect",
     "onCommand:ctMcp.disconnect",
     "onCommand:ctMcp.refresh"
@@ -124,6 +125,12 @@
         "icon": "$(run-all)"
       },
       {
+        "command": "ctMcp.openNavigator",
+        "title": "Open MCP Navigator",
+        "category": "Commerce MCP",
+        "icon": "$(list-tree)"
+      },
+      {
         "command": "ctMcp.connect",
         "title": "Connect Commerce MCP",
         "category": "Commerce MCP",
@@ -149,6 +156,10 @@
         },
         {
           "command": "ctMcp.openExplorer",
+          "when": "true"
+        },
+        {
+          "command": "ctMcp.openNavigator",
           "when": "true"
         },
         {

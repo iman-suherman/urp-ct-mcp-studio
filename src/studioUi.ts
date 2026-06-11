@@ -42,6 +42,7 @@ export type StudioWebviewMessage =
   | { type: "disconnect" }
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
+  | { type: "openNavigator" }
   | { type: "copyChatPrompt"; text: string }
   | { type: "copyAiPrompt"; toolName: string; description?: string }
   | { type: "clearLogs" };
@@ -204,7 +205,7 @@ export class StudioUiController {
       case "connect":
         await this.pushState(undefined, true);
         try {
-          await this.manager.connect(message.connectionId);
+          await this.manager.connect(message.connectionId, { openExplorer: false });
           await this.pushState(undefined, false);
         } catch (err) {
           const text = err instanceof Error ? err.message : String(err);
@@ -231,6 +232,10 @@ export class StudioUiController {
 
       case "openExplorer":
         await vscode.commands.executeCommand("ctMcp.openExplorer", message.toolName);
+        break;
+
+      case "openNavigator":
+        await vscode.commands.executeCommand("ctMcp.openNavigator");
         break;
 
       case "copyChatPrompt":
@@ -280,9 +285,9 @@ export function renderStudioHtml(options: {
     * { box-sizing: border-box; }
     body { margin: 0; padding: 12px; }
     .hero { text-align: center; margin-bottom: 12px; }
-    .logo { width: 72px; height: 72px; object-fit: contain; }
+    .logo { width: 104px; height: 104px; object-fit: contain; }
     .logo-fallback {
-      width: 72px; height: 72px; margin: 0 auto;
+      width: 104px; height: 104px; margin: 0 auto;
       display: grid; place-items: center;
       border-radius: 12px; background: rgba(128,128,128,0.15);
       font-weight: 700;
@@ -394,7 +399,8 @@ export function renderStudioHtml(options: {
         <button id="btn-connect">Connect</button>
         <button id="btn-disconnect">Disconnect</button>
         <button id="btn-refresh">Refresh</button>
-        <button id="btn-explorer">Open Explorer</button>
+        <button id="btn-navigator">Navigate</button>
+        <button id="btn-explorer" class="secondary">Explorer</button>
       </div>
       <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
       <div id="connect-diagnostics" class="diag-list"></div>
@@ -412,8 +418,8 @@ export function renderStudioHtml(options: {
       <div class="field"><label>Project Key</label><input id="projectKey" placeholder="my-project" /></div>
       <div class="field"><label>Client ID</label><input id="clientId" /></div>
       <div class="field"><label>Client Secret</label><input id="clientSecret" type="password" /></div>
-      <div class="field"><label>Auth URL</label><input id="authUrl" /></div>
       <div class="field"><label>API URL</label><input id="apiUrl" /></div>
+      <div class="field"><label>Auth URL</label><input id="authUrl" /></div>
       <div class="row">
         <button id="btn-save">Save Connection</button>
         <button id="btn-reset-form">Reset</button>
@@ -472,6 +478,9 @@ export function renderStudioHtml(options: {
     });
     document.getElementById('btn-refresh').addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh' });
+    });
+    document.getElementById('btn-navigator').addEventListener('click', () => {
+      vscode.postMessage({ type: 'openNavigator' });
     });
     document.getElementById('btn-explorer').addEventListener('click', () => {
       vscode.postMessage({ type: 'openExplorer' });

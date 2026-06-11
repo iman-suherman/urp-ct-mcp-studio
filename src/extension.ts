@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { ExplorerPanel } from "./explorerPanel";
+import { NavigatorPanel } from "./navigatorPanel";
 import { getCommerceMcpManager, maybeAutoConnect, deactivateCommerceMcpManager } from "./mcpManager";
 import { StudioViewProvider } from "./studioViewProvider";
 
@@ -22,9 +23,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("ctMcp.openExplorer", (toolName?: string) => {
       ExplorerPanel.show(context, manager, { toolName });
     }),
+    vscode.commands.registerCommand("ctMcp.openNavigator", () => {
+      NavigatorPanel.show(context, manager);
+    }),
     vscode.commands.registerCommand("ctMcp.connect", async () => {
       try {
-        await manager.connect();
+        await manager.connect(undefined, { openExplorer: false });
         await studioView.refresh();
       } catch (err) {
         const text = err instanceof Error ? err.message : String(err);
