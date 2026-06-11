@@ -24,13 +24,7 @@
     "onCommand:ctMcp.openNavigator",
     "onCommand:ctMcp.connect",
     "onCommand:ctMcp.disconnect",
-    "onCommand:ctMcp.refresh",
-    "onCommand:ctMcp.checkForUpdates",
-    "onCommand:ctMcp.downloadUpdate",
-    "onCommand:ctMcp.openReleaseNotes",
-    "onCommand:ctMcp.refreshVersionHistory",
-    "onCommand:ctMcp.openVersionHistory",
-    "onView:ctMcp.versionHistory"
+    "onCommand:ctMcp.refresh"
   ],
   "main": "./out/extension.js",
   "scripts": {
@@ -84,12 +78,6 @@
           "name": "Commerce MCP",
           "contextualTitle": "Commerce MCP Studio",
           "icon": "media/ct-mcp-vscode-extension-icon.svg"
-        },
-        {
-          "id": "ctMcp.versionHistory",
-          "name": "Version History",
-          "contextualTitle": "Version History",
-          "icon": "$(versions)"
         }
       ]
     },
@@ -120,27 +108,6 @@
           "type": "string",
           "default": "@commercetools/commerce-mcp@latest",
           "description": "npm package used to spawn the Commerce MCP server."
-        },
-        "ctMcp.updateCheckEnabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Check the CT MCP registry for extension updates on startup and every 12 hours."
-        },
-        "ctMcp.updateChannel": {
-          "type": "string",
-          "enum": ["stable", "insiders"],
-          "default": "stable",
-          "description": "Release channel used when checking for extension updates."
-        },
-        "ctMcp.registryApiUrl": {
-          "type": "string",
-          "default": "https://ct-mcp-registry.suherman.net",
-          "description": "Base URL for the CT MCP plugin registry API."
-        },
-        "ctMcp.websiteUrl": {
-          "type": "string",
-          "default": "https://ct-mcp.suherman.net",
-          "description": "Marketing website used for release notes links."
         }
       }
     },
@@ -179,36 +146,6 @@
         "title": "Refresh Commerce MCP",
         "category": "Commerce MCP",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "ctMcp.checkForUpdates",
-        "title": "Check for Updates",
-        "category": "Commerce MCP",
-        "icon": "$(cloud-download)"
-      },
-      {
-        "command": "ctMcp.downloadUpdate",
-        "title": "Download and Install Update",
-        "category": "Commerce MCP",
-        "icon": "$(cloud-download)"
-      },
-      {
-        "command": "ctMcp.openReleaseNotes",
-        "title": "Open Release Notes",
-        "category": "Commerce MCP",
-        "icon": "$(book)"
-      },
-      {
-        "command": "ctMcp.refreshVersionHistory",
-        "title": "Refresh Version History",
-        "category": "Commerce MCP",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "ctMcp.openVersionHistory",
-        "title": "Open Version History",
-        "category": "Commerce MCP",
-        "icon": "$(versions)"
       }
     ],
     "menus": {
@@ -236,34 +173,6 @@
         {
           "command": "ctMcp.refresh",
           "when": "true"
-        },
-        {
-          "command": "ctMcp.checkForUpdates",
-          "when": "true"
-        },
-        {
-          "command": "ctMcp.downloadUpdate",
-          "when": "true"
-        },
-        {
-          "command": "ctMcp.openReleaseNotes",
-          "when": "true"
-        },
-        {
-          "command": "ctMcp.openVersionHistory",
-          "when": "true"
-        }
-      ],
-      "view/title": [
-        {
-          "command": "ctMcp.refreshVersionHistory",
-          "when": "view == ctMcp.versionHistory",
-          "group": "navigation"
-        },
-        {
-          "command": "ctMcp.checkForUpdates",
-          "when": "view == ctMcp.versionHistory",
-          "group": "navigation"
         }
       ]
     }
