@@ -237,10 +237,14 @@ export class ExplorerPanel {
         break;
       }
 
-      case "copyChatPrompt":
-        await vscode.env.clipboard.writeText(buildChatPrompt(message.text));
+      case "copyChatPrompt": {
+        const connection = await this.manager.getActiveConnection();
+        await vscode.env.clipboard.writeText(
+          buildChatPrompt(message.text, { agentContext: true, connection })
+        );
         void vscode.window.showInformationMessage("Chat prompt copied to clipboard.");
         break;
+      }
 
       case "copyMcpJson": {
         let args: Record<string, unknown> = {};

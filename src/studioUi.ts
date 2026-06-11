@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { resolveStudioConfig } from "./config";
 import { formatLogTimestamp } from "./logStore";
 import { buildAiPrompt, buildChatPrompt } from "./mcpBootstrap";
+import { buildProductSearchChatPrompt } from "./mcpChatContext";
 import { CommerceMcpManager } from "./mcpManager";
 import { openProjectMcpFiles } from "./projectMcpInit";
 import { groupToolsByCategory } from "./toolCatalog";
@@ -46,7 +47,8 @@ export type StudioWebviewMessage =
   | { type: "openExplorer"; toolName?: string }
   | { type: "openNavigator" }
   | { type: "initProjectMcp" }
-  | { type: "copyChatPrompt"; text: string }
+  | { type: "copyChatPrompt"; text: string; agentContext?: boolean }
+  | { type: "copyChatContext" }
   | { type: "copyAiPrompt"; toolName: string; description?: string }
   | { type: "clearLogs" };
 
@@ -262,10 +264,29 @@ export class StudioUiController {
         }
         break;
 
-      case "copyChatPrompt":
-        await vscode.env.clipboard.writeText(buildChatPrompt(message.text));
+      case "copyChatPrompt": {
+        const active = await this.manager.getActiveConnection();
+        await vscode.env.clipboard.writeText(
+          buildChatPrompt(message.text, {
+            agentContext: message.agentContext,
+            connection: active,
+          })
+        );
         void vscode.window.showInformationMessage("Chat prompt copied to clipboard.");
         break;
+      }
+
+      case "copyChatContext": {
+        const active = await this.manager.getActiveConnection();
+        await vscode.env.clipboard.writeText(
+          buildChatPrompt(buildProductSearchChatPrompt(5, active), {
+            agentContext: true,
+            connection: active,
+          })
+        );
+        void vscode.window.showInformationMessage("Chat context and sample product-search prompt copied.");
+        break;
+      }
 
       case "copyAiPrompt":
         await vscode.env.clipboard.writeText(
@@ -453,8 +474,9 @@ export function renderStudioHtml(options: {
       </div>
       <div class="row" style="margin-top:6px;">
         <button id="btn-init-project" class="secondary">Init Project MCP</button>
+        <button id="btn-copy-chat-context" class="secondary">Copy Chat Context</button>
       </div>
-      <p class="subtitle" style="margin-top:6px;">Writes <code>.cursor/mcp.json</code>, <code>.env.mcp</code>, and a Cursor rule using the active connection.</p>
+      <p class="subtitle" style="margin-top:6px;">Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code>. Chat context teaches the agent playbook for MCP tools and API fallback.</p>
       <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
       <div id="connect-diagnostics" class="diag-list"></div>
     </div>
@@ -540,6 +562,9 @@ export function renderStudioHtml(options: {
     });
     document.getElementById('btn-init-project').addEventListener('click', () => {
       vscode.postMessage({ type: 'initProjectMcp' });
+    });
+    document.getElementById('btn-copy-chat-context').addEventListener('click', () => {
+      vscode.postMessage({ type: 'copyChatContext' });
     });
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
       vscode.postMessage({ type: 'clearLogs' });
@@ -706,7 +731,11 @@ export function renderStudioHtml(options: {
         </div>
       \`).join('');
       el.querySelectorAll('[data-chat]').forEach(btn => {
-        btn.addEventListener('click', () => vscode.postMessage({ type: 'copyChatPrompt', text: btn.dataset.chat }));
+        btn.addEventListener('click', () => vscode.postMessage({
+          type: 'copyChatPrompt',
+          text: btn.dataset.chat,
+          agentContext: true
+        }));
       });
       el.querySelectorAll('[data-ai-tool]').forEach(btn => {
         btn.addEventListener('click', () => vscode.postMessage({

@@ -1,6 +1,14 @@
 import { PromptTemplate } from "./types";
+import { buildProductSearchChatPrompt } from "./mcpChatContext";
 
 export const PROMPT_TEMPLATES: PromptTemplate[] = [
+  {
+    id: "product-search-sample",
+    title: "Product Search (5 items)",
+    description: "Smallest match-all product search with MCP or API fallback",
+    toolName: "products.search",
+    prompt: buildProductSearchChatPrompt(5),
+  },
   {
     id: "product-discovery",
     title: "Product Discovery",

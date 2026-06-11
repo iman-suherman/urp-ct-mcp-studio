@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
+import { buildCommerceMcpCursorRule } from "./mcpChatContext";
 import { resolveStudioConfig } from "./config";
 import { buildNativeMcpServerConfig, normalizeCommercetoolsUrls } from "./mcpBootstrap";
 import { MCPConnection } from "./types";
@@ -90,26 +91,6 @@ function buildEnvMcpContent(connection: MCPConnection, clientSecret: string): st
   return lines.join("\n");
 }
 
-function buildCursorRuleContent(connection: MCPConnection): string {
-  return `---
-description: Commerce MCP context for commercetools project operations
-alwaysApply: false
----
-
-# Commerce MCP
-
-This workspace is configured for Commerce MCP (\`commerce-mcp\`) against commercetools.
-
-- **Connection:** ${connection.name}
-- **Project key:** ${connection.projectKey}
-- **Env file:** \`.env.mcp\` (local credentials — do not commit)
-- **MCP config:** \`.cursor/mcp.json\`
-
-Use \`@commerce-mcp\` in chat or MCP tools for product, cart, order, customer, and channel operations.
-Reload the MCP server after changing \`.env.mcp\` or \`.cursor/mcp.json\`.
-`;
-}
-
 export async function initProjectMcpContext(
   extensionPath: string,
   connection: MCPConnection,
@@ -149,7 +130,7 @@ export async function initProjectMcpContext(
   files.push(VSCODE_SETTINGS_FILE);
 
   const rulePath = path.join(root, CURSOR_RULE_FILE);
-  writeTextFile(rulePath, buildCursorRuleContent(connection));
+  writeTextFile(rulePath, buildCommerceMcpCursorRule(connection));
   files.push(CURSOR_RULE_FILE);
 
   if (ensureGitignoreEntry(root, ENV_MCP_FILE)) {

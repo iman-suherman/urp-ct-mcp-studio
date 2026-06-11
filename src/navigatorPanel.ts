@@ -125,10 +125,17 @@ export class NavigatorPanel {
         ExplorerPanel.show(this.context, this.manager, { toolName: message.toolName });
         break;
 
-      case "copyChatPrompt":
-        await vscode.env.clipboard.writeText(buildChatPrompt(message.description ?? message.toolName));
+      case "copyChatPrompt": {
+        const connection = await this.manager.getActiveConnection();
+        const text = message.description?.trim()
+          ? `Use ${message.toolName} to ${message.description.trim().replace(/\.$/, "")}.`
+          : `Use the ${message.toolName} Commerce MCP tool.`;
+        await vscode.env.clipboard.writeText(
+          buildChatPrompt(text, { agentContext: true, connection: connection })
+        );
         void vscode.window.showInformationMessage("Chat prompt copied to clipboard.");
         break;
+      }
 
       case "copyAiPrompt":
         await vscode.env.clipboard.writeText(

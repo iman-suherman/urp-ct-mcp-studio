@@ -1,5 +1,6 @@
 import { createRequire } from "module";
 import * as path from "path";
+import { buildCommerceMcpChatContext } from "./mcpChatContext";
 import { MCPConnection } from "./types";
 import { resolveStudioConfig, ResolvedStudioConfig } from "./config";
 
@@ -154,8 +155,15 @@ export function buildMcpCallJson(toolName: string, args: Record<string, unknown>
   return JSON.stringify({ tool: toolName, arguments: args }, null, 2);
 }
 
-export function buildChatPrompt(text: string): string {
-  return `@commerce-mcp\n${text.trim()}`;
+export function buildChatPrompt(
+  text: string,
+  options?: { agentContext?: boolean; connection?: MCPConnection }
+): string {
+  const body =
+    options?.agentContext === true
+      ? `${buildCommerceMcpChatContext(options.connection)}\n\n---\n\n${text.trim()}`
+      : text.trim();
+  return `@commerce-mcp\n${body}`;
 }
 
 export function buildAiPrompt(toolName: string, description?: string): string {
