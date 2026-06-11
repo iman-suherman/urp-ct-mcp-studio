@@ -20,7 +20,7 @@ export async function Hero() {
       <span className="inline-flex rounded-full bg-brand-purple/10 px-4 py-1.5 text-sm font-semibold uppercase tracking-wide text-brand-purple">
         Commerce MCP extension for VS Code
       </span>
-      <h1 className="mt-6 max-w-4xl text-5xl font-bold leading-[1.1] tracking-tight text-slate-900 md:text-6xl lg:max-w-none lg:whitespace-nowrap lg:text-[3.25rem] xl:text-7xl">
+      <h1 className="mt-6 max-w-4xl text-balance text-4xl font-bold leading-[1.1] tracking-tight text-slate-900 sm:text-5xl md:text-6xl lg:max-w-5xl lg:text-[3.25rem] xl:max-w-6xl xl:text-6xl">
         Connect, explore, and run{" "}
         <span className="gradient-text">MCP tools from your editor.</span>
       </h1>
