@@ -15,6 +15,13 @@ const MCP_REQUEST_OPTIONS = {
   resetTimeoutOnProgress: true,
 } as const;
 
+function redactArg(arg: string): string {
+  if (arg.startsWith("--clientSecret=")) {
+    return "--clientSecret=***";
+  }
+  return arg;
+}
+
 export class McpProcessManager extends EventEmitter {
   private client: Client | undefined;
   private transport: StdioClientTransport | undefined;
@@ -46,14 +53,24 @@ export class McpProcessManager extends EventEmitter {
     this.connecting = true;
     try {
       await this.disconnect();
+      this.emit("log", "[connect] Cleared previous MCP session state.");
 
       const spawn = resolveCommerceMcpSpawn(connection, clientSecret, this.extensionPath);
+      this.emit("log", `[connect] Launch command: ${spawn.command}`);
+      this.emit("log", `[connect] Launch args: ${spawn.args.map(redactArg).join(" ")}`);
       const transport = new StdioClientTransport({
         command: spawn.command,
         args: spawn.args,
         stderr: "pipe",
         env: spawn.env,
       });
+      transport.onclose = () => {
+        this.emit("log", "[connect] Transport closed.");
+      };
+      transport.onerror = (error: unknown) => {
+        const text = error instanceof Error ? error.message : String(error);
+        this.emit("log", `[connect] Transport error: ${text}`);
+      };
 
       const client = new Client(
         { name: "ct-mcp-studio", version: "0.1.0" },
@@ -63,13 +80,17 @@ export class McpProcessManager extends EventEmitter {
       transport.stderr?.on("data", (chunk: Buffer) => {
         const text = chunk.toString("utf-8").trim();
         if (text) {
-          this.emit("log", text);
+          this.emit("log", `[connect] [stderr] ${text}`);
         }
       });
 
+      this.emit("log", "[connect] Opening MCP client transport...");
       await client.connect(transport, MCP_REQUEST_OPTIONS);
+      this.emit("log", "[connect] MCP initialize completed.");
 
+      this.emit("log", "[connect] Requesting tools/list...");
       const listed = await client.listTools({}, MCP_REQUEST_OPTIONS);
+      this.emit("log", `[connect] tools/list returned ${listed.tools.length} tool(s).`);
       this.tools = listed.tools.map((tool) => ({
         name: tool.name,
         description: tool.description,
@@ -85,6 +106,10 @@ export class McpProcessManager extends EventEmitter {
       };
 
       return this.tools;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      this.emit("log", `[connect] MCP connect failed: ${text}`);
+      throw error;
     } finally {
       this.connecting = false;
     }

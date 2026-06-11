@@ -22,6 +22,7 @@ export interface StudioPanelState {
   tools: Array<{ name: string; description?: string; category: string }>;
   toolGroups: Array<{ category: string; tools: Array<{ name: string; description?: string }> }>;
   logs: Array<{ time: string; level: string; message: string; toolName?: string }>;
+  connectDiagnostics: Array<{ time: string; level: string; message: string }>;
   templates: Array<{ id: string; title: string; description: string; prompt: string; toolName: string }>;
   defaults: {
     authUrl: string;
@@ -99,6 +100,14 @@ export class StudioUiController {
           }
         : undefined;
     const logs: LogEntry[] = this.manager.logs.list(80);
+    const connectDiagnostics = logs
+      .filter(
+        (entry) =>
+          entry.toolName === "connect" ||
+          entry.message.startsWith("[connect]") ||
+          /connection failed|connecting to/i.test(entry.message)
+      )
+      .slice(0, 30);
 
     await this.host.postMessage({
       type: "state",
@@ -125,6 +134,11 @@ export class StudioUiController {
         level: entry.level,
         message: entry.message,
         toolName: entry.toolName,
+      })),
+      connectDiagnostics: connectDiagnostics.map((entry) => ({
+        time: formatLogTimestamp(entry.timestamp),
+        level: entry.level,
+        message: entry.message,
       })),
       templates: PROMPT_TEMPLATES.map((template) => ({
         id: template.id,
@@ -338,6 +352,13 @@ export function renderStudioHtml(options: {
     .tool-link:hover { background: rgba(128,128,128,.08); }
     .tool-name { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; }
     .log-item { font-size: 11px; padding: 4px 0; border-bottom: 1px solid rgba(128,128,128,.12); }
+    .diag-list {
+      margin-top: 8px;
+      max-height: 180px;
+      overflow: auto;
+      border-top: 1px solid rgba(128,128,128,.12);
+      padding-top: 4px;
+    }
     .log-time { color: var(--vscode-descriptionForeground); margin-right: 6px; }
     .log-error { color: #ef4444; }
     .log-success { color: #22c55e; }
@@ -375,6 +396,8 @@ export function renderStudioHtml(options: {
         <button id="btn-refresh">Refresh</button>
         <button id="btn-explorer">Open Explorer</button>
       </div>
+      <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
+      <div id="connect-diagnostics" class="diag-list"></div>
     </div>
 
     <div class="card">
@@ -601,6 +624,20 @@ export function renderStudioHtml(options: {
       });
     }
 
+    function renderConnectDiagnostics(logs) {
+      const el = document.getElementById('connect-diagnostics');
+      if (!logs.length) {
+        el.innerHTML = '<p class="subtitle">No connection diagnostics yet.</p>';
+        return;
+      }
+      el.innerHTML = logs.map(log => {
+        const levelClass = log.level === 'error' ? 'log-error' : (log.level === 'success' ? 'log-success' : '');
+        return '<div class="log-item ' + levelClass + '">' +
+          '<span class="log-time">[' + log.time + ']</span>' + log.message +
+          '</div>';
+      }).join('');
+    }
+
     function applyState(next) {
       state = next;
       document.getElementById('connection-status').textContent = next.connectionStatus || (next.connected ? 'Connected' : 'Not connected');
@@ -609,6 +646,7 @@ export function renderStudioHtml(options: {
       renderConnections(next.connections || []);
       renderTools(next.toolGroups || []);
       renderLogs(next.logs || []);
+      renderConnectDiagnostics(next.connectDiagnostics || []);
       renderTemplates(next.templates || []);
 
       if (!document.getElementById('authUrl').value && next.defaults) {

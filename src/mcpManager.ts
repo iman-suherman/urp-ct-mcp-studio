@@ -28,7 +28,7 @@ export class CommerceMcpManager {
   ) {
     this.processManager = new McpProcessManager(context.extensionPath);
     this.processManager.on("log", (message: string) => {
-      this.logs.info(message);
+      this.logs.info(message, message.startsWith("[connect]") ? "connect" : undefined);
       this.notifyChanged();
     });
   }
@@ -111,10 +111,21 @@ export class CommerceMcpManager {
       },
       async () => {
         const started = Date.now();
-        this.logs.info(`Connecting to ${connection.name} (${connection.projectKey})…`);
+        this.logs.info(
+          `[connect] Connecting to ${connection.name} (${connection.projectKey})…`,
+          "connect"
+        );
+        this.notifyChanged();
 
         try {
+          this.logs.info("[connect] Starting MCP stdio client…", "connect");
+          this.notifyChanged();
           const tools = await this.processManager.connect(connection, clientSecret);
+          this.logs.info("[connect] MCP handshake complete.", "connect");
+          this.notifyChanged();
+
+          this.logs.info("[connect] Saving active connection and caching tool metadata…", "connect");
+          this.notifyChanged();
           await this.store.setActiveConnection(connection.id);
           await this.context.globalState.update(GLOBAL_CACHED_TOOLS_KEY, tools);
 
@@ -123,6 +134,8 @@ export class CommerceMcpManager {
           await this.context.globalState.update(GLOBAL_CONNECTION_STATUS_KEY, message);
 
           if (config.syncNativeMcpConfig) {
+            this.logs.info("[connect] Syncing native MCP config…", "connect");
+            this.notifyChanged();
             await syncNativeMcpConfig(connection, clientSecret, this.context.extensionPath);
           }
 
@@ -141,6 +154,7 @@ export class CommerceMcpManager {
           };
         } catch (err) {
           let text = err instanceof Error ? err.message : String(err);
+          const detail = err instanceof Error && err.stack ? err.stack : text;
           if (text.includes("Request timed out") || text.includes("-32001")) {
             text =
               "Commerce MCP took too long to start. Reload the window and try again — first connect can take up to 3 minutes while tools load.";
@@ -150,6 +164,7 @@ export class CommerceMcpManager {
             `Connection failed: ${text}`
           );
           this.logs.error(`Connection failed: ${text}`);
+          this.logs.error(`[connect] Failure detail: ${detail}`, "connect");
           await syncNativeMcpConfig(undefined, undefined, this.context.extensionPath);
           this.notifyChanged();
           throw err;
