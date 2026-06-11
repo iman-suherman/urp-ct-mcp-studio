@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { normalizeCommercetoolsUrls } from "./mcpBootstrap";
 import { MCPConnection, MCPConnectionInput } from "./types";
 import { GLOBAL_ACTIVE_CONNECTION_KEY, GLOBAL_CONNECTIONS_KEY, clientSecretKey } from "./secrets";
 
@@ -39,13 +40,14 @@ export class ConnectionStore {
     const id = existingId ?? createId();
     const existing = connections.find((item) => item.id === id);
 
+    const urls = normalizeCommercetoolsUrls(input.authUrl, input.apiUrl);
     const connection: MCPConnection = {
       id,
       name: input.name.trim(),
       projectKey: input.projectKey.trim(),
       clientId: input.clientId.trim(),
-      authUrl: input.authUrl.trim(),
-      apiUrl: input.apiUrl.trim(),
+      authUrl: urls.authUrl,
+      apiUrl: urls.apiUrl,
       enabledTools: input.enabledTools?.length ? input.enabledTools : ["all"],
       isAdmin: input.isAdmin ?? true,
     };

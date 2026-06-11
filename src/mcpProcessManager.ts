@@ -2,7 +2,11 @@ import { EventEmitter } from "events";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { MCPConnection, MCPTool } from "./types";
-import { MCP_REQUEST_TIMEOUT_MS, resolveCommerceMcpSpawn } from "./mcpBootstrap";
+import {
+  MCP_REQUEST_TIMEOUT_MS,
+  normalizeCommercetoolsUrls,
+  resolveCommerceMcpSpawn,
+} from "./mcpBootstrap";
 
 export interface McpSessionInfo {
   connectionId: string;
@@ -54,6 +58,14 @@ export class McpProcessManager extends EventEmitter {
     try {
       await this.disconnect();
       this.emit("log", "[connect] Cleared previous MCP session state.");
+
+      const urls = normalizeCommercetoolsUrls(connection.authUrl, connection.apiUrl);
+      if (urls.swapped) {
+        this.emit(
+          "log",
+          "[connect] Auth URL and API URL were swapped — using corrected values for this connect."
+        );
+      }
 
       const spawn = resolveCommerceMcpSpawn(connection, clientSecret, this.extensionPath);
       this.emit("log", `[connect] Launch command: ${spawn.command}`);

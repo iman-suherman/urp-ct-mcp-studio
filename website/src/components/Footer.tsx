@@ -50,14 +50,6 @@ export function Footer() {
             <a href={GITHUB_REPO} target="_blank" rel="noreferrer" className="hover:text-brand-purple">
               GitHub
             </a>
-            <a
-              href="https://ct-mcp-registry.suherman.net/health"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-brand-purple"
-            >
-              Registry API
-            </a>
           </div>
         </div>
       </div>

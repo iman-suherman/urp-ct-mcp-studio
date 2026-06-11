@@ -22,12 +22,29 @@ function parseCommerceMcpPackage(spec: string): string {
   return spec.slice(0, at);
 }
 
+export function normalizeCommercetoolsUrls(
+  authUrl: string,
+  apiUrl: string
+): { authUrl: string; apiUrl: string; swapped: boolean } {
+  const trimmedAuth = authUrl.trim();
+  const trimmedApi = apiUrl.trim();
+  const authLooksLikeApi = /^https:\/\/api\./i.test(trimmedAuth);
+  const apiLooksLikeAuth = /^https:\/\/auth\./i.test(trimmedApi);
+
+  if (authLooksLikeApi && apiLooksLikeAuth) {
+    return { authUrl: trimmedApi, apiUrl: trimmedAuth, swapped: true };
+  }
+
+  return { authUrl: trimmedAuth, apiUrl: trimmedApi, swapped: false };
+}
+
 export function buildCommerceMcpCliArgs(
   connection: MCPConnection,
   clientSecret: string,
   config: ResolvedStudioConfig = resolveStudioConfig()
 ): string[] {
   const tools = connection.enabledTools.join(",") || "all";
+  const { authUrl, apiUrl } = normalizeCommercetoolsUrls(connection.authUrl, connection.apiUrl);
 
   const args = [
     `--tools=${tools}`,
@@ -35,8 +52,8 @@ export function buildCommerceMcpCliArgs(
     `--clientId=${connection.clientId}`,
     `--clientSecret=${clientSecret}`,
     `--projectKey=${connection.projectKey}`,
-    `--authUrl=${connection.authUrl}`,
-    `--apiUrl=${connection.apiUrl}`,
+    `--authUrl=${authUrl}`,
+    `--apiUrl=${apiUrl}`,
     `--dynamicToolLoadingThreshold=${config.dynamicToolLoadingThreshold}`,
   ];
 
