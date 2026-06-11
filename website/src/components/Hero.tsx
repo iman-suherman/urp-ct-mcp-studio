@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { LocalReleaseDate } from "@/components/LocalReleaseDate";
+import { BRAND_NAME } from "@/lib/brand";
 import { useLatestVersion } from "@/hooks/useRegistry";
 import {
   flattenReleaseNotes,
@@ -69,49 +71,60 @@ export function Hero() {
           </div>
         </div>
 
-        {loading && (
-          <aside
-            aria-label="Latest release"
-            aria-busy="true"
-            className="border-t border-slate-200/50 pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0 xl:pl-12"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-purple/80">
-              Latest release
-            </p>
-            <div className="mt-3 h-5 w-3/4 animate-pulse rounded bg-slate-200" />
-            <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-slate-100" />
-          </aside>
-        )}
-
-        {!loading && latest && (
-          <aside
-            aria-label="Latest release"
-            className="border-t border-slate-200/50 pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0 xl:pl-12"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-purple/80">
-              Latest release
-            </p>
-            <p className="mt-3 text-base font-semibold leading-snug text-slate-800 sm:text-lg">
-              {latest.summary ?? `Commerce MCP Studio ${versionLabel}`}
-            </p>
-            <p className="mt-2 text-sm text-slate-500">
-              {formatBytes(latest.sizeBytes)} · VSIX for VS Code 1.90+
-            </p>
-            {highlights.length > 0 && (
-              <ul className="mt-5 space-y-2.5 text-sm leading-relaxed text-slate-600">
-                {highlights.map((note) => (
-                  <li key={note} className="flex gap-2">
-                    <span aria-hidden className="shrink-0 text-slate-400">
-                      •
-                    </span>
-                    <span>{note}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </aside>
-        )}
+        <div className="relative overflow-hidden">
+          <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-brand-purple/20 via-brand-teal/10 to-transparent blur-2xl md:-inset-6" />
+          <div className="card relative overflow-hidden p-3 shadow-card">
+            <Image
+              src="/hero.png"
+              alt={`${BRAND_NAME} — connect, explore, execute, and automate Commerce MCP tools in VS Code`}
+              width={1024}
+              height={682}
+              priority
+              className="h-auto w-full rounded-xl"
+            />
+          </div>
+        </div>
       </div>
+
+      {loading && (
+        <aside
+          aria-label="Latest release"
+          aria-busy="true"
+          className="mt-8 border-t border-slate-200/50 pt-8"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-purple/80">
+            Latest release
+          </p>
+          <div className="mt-3 h-5 w-3/4 max-w-md animate-pulse rounded bg-slate-200" />
+          <div className="mt-2 h-4 w-1/2 max-w-xs animate-pulse rounded bg-slate-100" />
+        </aside>
+      )}
+
+      {!loading && latest && (
+        <aside aria-label="Latest release" className="mt-8 border-t border-slate-200/50 pt-8">
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-purple/80">
+            Latest release
+          </p>
+          <p className="mt-3 text-base font-semibold leading-snug text-slate-800 sm:text-lg">
+            {latest.summary ?? `Commerce MCP Studio ${versionLabel}`}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">
+            {formatBytes(latest.sizeBytes)} · VSIX for VS Code 1.90+
+          </p>
+          {highlights.length > 0 && (
+            <ul className="mt-5 space-y-2.5 text-sm leading-relaxed text-slate-600">
+              {highlights.map((note) => (
+                <li key={note} className="flex gap-2">
+                  <span aria-hidden className="shrink-0 text-slate-400">
+                    •
+                  </span>
+                  <span>{note}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+      )}
     </section>
   );
 }
