@@ -3,6 +3,7 @@ import { ExplorerPanel } from "./explorerPanel";
 import { buildAiPrompt, buildChatPrompt } from "./mcpBootstrap";
 import { CommerceMcpManager } from "./mcpManager";
 import { categorizeTools, groupToolsByCategory } from "./toolCatalog";
+import { filterToolGroupsBySemanticSearch } from "./semanticToolSearch";
 import {
   NavigatorWebviewMessage,
   navigatorToPanelState,
@@ -11,6 +12,8 @@ import {
 
 export class NavigatorPanel {
   public static currentPanel: NavigatorPanel | undefined;
+
+  private searchQuery = "";
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -65,7 +68,8 @@ export class NavigatorPanel {
     const connected = await this.manager.isConnected();
     const connection = await this.manager.getActiveConnection();
     const tools = connected ? categorizeTools(await this.manager.listTools()) : [];
-    const toolGroups = groupToolsByCategory(tools);
+    const allGroups = groupToolsByCategory(tools);
+    const toolGroups = filterToolGroupsBySemanticSearch(allGroups, this.searchQuery);
 
     if (connection) {
       this.panel.title = `${connection.name} · MCP Navigator`;
@@ -77,6 +81,7 @@ export class NavigatorPanel {
         connectionName: connection?.name ?? "",
         projectKey: connection?.projectKey ?? "",
         connectionStatus: this.manager.getConnectionStatusMessage(),
+        searchQuery: this.searchQuery,
         error: options?.error,
         busy: options?.busy,
       })
@@ -86,6 +91,11 @@ export class NavigatorPanel {
   private async handleMessage(message: NavigatorWebviewMessage): Promise<void> {
     switch (message.type) {
       case "ready":
+        await this.refreshState();
+        break;
+
+      case "search":
+        this.searchQuery = message.query;
         await this.refreshState();
         break;
 

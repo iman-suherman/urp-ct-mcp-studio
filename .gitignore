@@ -17,3 +17,4 @@ logs/*
 
 # Cursor IDE rules (local only)
 .cursor/rules/
+.env.mcp

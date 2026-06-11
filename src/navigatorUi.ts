@@ -5,6 +5,7 @@ export type NavigatorWebviewMessage =
   | { type: "connect" }
   | { type: "disconnect" }
   | { type: "refresh" }
+  | { type: "search"; query: string }
   | { type: "openExplorer"; toolName: string }
   | { type: "copyChatPrompt"; toolName: string; description?: string }
   | { type: "copyAiPrompt"; toolName: string; description?: string };
@@ -19,6 +20,7 @@ export interface NavigatorPanelState {
     tools: Array<{ name: string; description?: string; action: string }>;
   }>;
   toolCount: number;
+  searchQuery?: string;
   error?: string;
   busy?: boolean;
 }
@@ -109,6 +111,22 @@ export function renderNavigatorHtml(options: { cspSource?: string } = {}): strin
       background: var(--vscode-button-secondaryBackground, transparent);
       color: var(--vscode-button-secondaryForeground, inherit);
       border: 1px solid rgba(128,128,128,.35);
+    }
+    button.btn-connect {
+      background: rgba(37,99,235,0.92);
+      color: #fff;
+      border: 1px solid rgba(37,99,235,0.55);
+    }
+    button.btn-connect:hover {
+      background: rgba(37,99,235,1);
+    }
+    button.btn-disconnect {
+      background: rgba(239,68,68,0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.45);
+    }
+    button.btn-disconnect:hover {
+      background: rgba(239,68,68,0.22);
     }
     button.small {
       padding: 5px 10px;
@@ -216,8 +234,8 @@ export function renderNavigatorHtml(options: { cspSource?: string } = {}): strin
     <span id="statusPill" class="status-pill disconnected">Not connected</span>
     <div id="connMeta" class="conn-meta">Select a connection in the sidebar, then connect here.</div>
     <div class="conn-actions">
-      <button id="btnConnect">Connect</button>
-      <button id="btnDisconnect" class="secondary">Disconnect</button>
+      <button id="btnConnect" class="btn-connect">Connect</button>
+      <button id="btnDisconnect" class="btn-disconnect hidden">Disconnect</button>
       <button id="btnRefresh" class="secondary">Refresh</button>
     </div>
   </div>
@@ -226,7 +244,7 @@ export function renderNavigatorHtml(options: { cspSource?: string } = {}): strin
   <div id="busyLine" class="conn-bar busy hidden">Working…</div>
 
   <div id="toolbar" class="toolbar hidden">
-    <input id="search" class="search" type="search" placeholder="Search tools by name or description…" />
+    <input id="search" class="search" type="search" placeholder="Search tools by meaning, name, or description…" />
     <span id="toolCount" class="tool-count"></span>
   </div>
 
@@ -251,7 +269,15 @@ export function renderNavigatorHtml(options: { cspSource?: string } = {}): strin
     document.getElementById('btnRefresh').addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh' });
     });
-    document.getElementById('search').addEventListener('input', () => renderTools(state.toolGroups || []));
+
+    let searchTimer;
+    document.getElementById('search').addEventListener('input', (event) => {
+      const query = event.target.value || '';
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        vscode.postMessage({ type: 'search', query });
+      }, 180);
+    });
 
     function escapeHtml(value) {
       return String(value)
@@ -262,22 +288,13 @@ export function renderNavigatorHtml(options: { cspSource?: string } = {}): strin
     }
 
     function renderTools(groups) {
-      const query = (document.getElementById('search').value || '').trim().toLowerCase();
       const grid = document.getElementById('toolGrid');
-      const filtered = groups.map(group => ({
-        category: group.category,
-        tools: group.tools.filter(tool => {
-          if (!query) return true;
-          const haystack = (tool.name + ' ' + (tool.description || '') + ' ' + tool.action).toLowerCase();
-          return haystack.includes(query);
-        })
-      })).filter(group => group.tools.length > 0);
-
+      const filtered = groups.filter(group => group.tools.length > 0);
       const total = filtered.reduce((sum, group) => sum + group.tools.length, 0);
       document.getElementById('toolCount').textContent = total + ' tool' + (total === 1 ? '' : 's');
 
       if (!filtered.length) {
-        grid.innerHTML = '<div class="empty">No tools match your search.</div>';
+        grid.innerHTML = '<div class="empty">No tools match your search. Try words like product, order, inventory, customer, or publish.</div>';
         return;
       }
 
@@ -335,10 +352,18 @@ export function renderNavigatorHtml(options: { cspSource?: string } = {}): strin
         : 'Select a connection in the sidebar, then connect here.';
       document.getElementById('connMeta').textContent = next.connectionStatus || meta;
 
+      document.getElementById('btnConnect').classList.toggle('hidden', connected);
+      document.getElementById('btnDisconnect').classList.toggle('hidden', !connected);
+
       document.getElementById('toolbar').classList.toggle('hidden', !connected);
       document.getElementById('emptyState').classList.toggle('hidden', connected);
       document.getElementById('toolGrid').classList.toggle('hidden', !connected);
       document.getElementById('busyLine').classList.toggle('hidden', !next.busy);
+
+      const searchInput = document.getElementById('search');
+      if (typeof next.searchQuery === 'string' && searchInput.value !== next.searchQuery) {
+        searchInput.value = next.searchQuery;
+      }
 
       const errorEl = document.getElementById('errorBox');
       if (next.error) {

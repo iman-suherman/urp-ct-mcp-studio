@@ -466,17 +466,12 @@ export function renderStudioHtml(options: {
       <div class="status" id="connection-status">Not connected</div>
       <div class="health" id="health"></div>
       <div class="row">
-        <button id="btn-connect">Connect</button>
-        <button id="btn-disconnect">Disconnect</button>
         <button id="btn-refresh">Refresh</button>
         <button id="btn-navigator">Navigate</button>
-        <button id="btn-explorer" class="secondary">Explorer</button>
-      </div>
-      <div class="row" style="margin-top:6px;">
+        <button id="btn-explorer">Explorer</button>
         <button id="btn-init-project" class="secondary">Init Project MCP</button>
-        <button id="btn-copy-chat-context" class="secondary">Copy Chat Context</button>
       </div>
-      <p class="subtitle" style="margin-top:6px;">Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code>. Chat context teaches the agent playbook for MCP tools and API fallback.</p>
+      <p class="subtitle" style="margin-top:6px;">Connect or disconnect from saved connections below. Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code> into the open workspace.</p>
       <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
       <div id="connect-diagnostics" class="diag-list"></div>
     </div>
@@ -545,12 +540,6 @@ export function renderStudioHtml(options: {
       el.addEventListener('click', () => setTab(el.dataset.tab));
     });
 
-    document.getElementById('btn-connect').addEventListener('click', () => {
-      vscode.postMessage({ type: 'connect' });
-    });
-    document.getElementById('btn-disconnect').addEventListener('click', () => {
-      vscode.postMessage({ type: 'disconnect' });
-    });
     document.getElementById('btn-refresh').addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh' });
     });
@@ -562,9 +551,6 @@ export function renderStudioHtml(options: {
     });
     document.getElementById('btn-init-project').addEventListener('click', () => {
       vscode.postMessage({ type: 'initProjectMcp' });
-    });
-    document.getElementById('btn-copy-chat-context').addEventListener('click', () => {
-      vscode.postMessage({ type: 'copyChatContext' });
     });
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
       vscode.postMessage({ type: 'clearLogs' });
