@@ -1,15 +1,149 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAllVersions } from "@/hooks/useRegistry";
 import {
   flattenReleaseNotes,
   formatBytes,
   formatDate,
   toPublicDownloadUrl,
+  type PluginVersion,
 } from "@/lib/registry";
+
+const PAGE_SIZE = 10;
+
+function ReleaseCard({
+  version,
+  isLatest,
+}: {
+  version: PluginVersion;
+  isLatest: boolean;
+}) {
+  const notes = flattenReleaseNotes(version.releaseNotes).slice(0, 4);
+
+  return (
+    <article className="card p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-semibold text-slate-900">v{version.version}</h3>
+            {isLatest && (
+              <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-xs font-semibold text-brand-purple">
+                Latest
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-sm text-slate-600">
+            {version.summary ?? "CT MCP Plugins release"}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Released {formatDate(version.publishedAt)} · {formatBytes(version.sizeBytes)}
+          </p>
+          {notes.length > 0 && (
+            <ul className="mt-4 space-y-1 text-sm text-slate-600">
+              {notes.map((note) => (
+                <li key={note}>• {note}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <a href={toPublicDownloadUrl(version)} className="btn-primary shrink-0">
+          Download
+        </a>
+      </div>
+    </article>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="mt-6 space-y-4" aria-busy="true" aria-label="Loading releases">
+      {[0, 1, 2].map((key) => (
+        <div key={key} className="card p-6">
+          <div className="h-6 w-24 animate-pulse rounded bg-slate-200" />
+          <div className="mt-3 h-4 w-2/3 animate-pulse rounded bg-slate-100" />
+          <div className="mt-2 h-3 w-1/3 animate-pulse rounded bg-slate-100" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Pagination({
+  currentPage,
+  totalPages,
+  totalCount,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  const start = (currentPage - 1) * PAGE_SIZE + 1;
+  const end = Math.min(currentPage * PAGE_SIZE, totalCount);
+
+  return (
+    <nav
+      className="mt-8 flex flex-col gap-4 border-t border-slate-200/80 pt-6 sm:flex-row sm:items-center sm:justify-between"
+      aria-label="Release pagination"
+    >
+      <p className="text-sm text-slate-600">
+        Showing {start}–{end} of {totalCount} releases
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage <= 1}
+          className="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Previous page"
+        >
+          Previous
+        </button>
+        <span className="px-2 text-sm font-medium text-slate-700">
+          Page {currentPage} of {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage >= totalPages}
+          className="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Next page"
+        >
+          Next
+        </button>
+      </div>
+    </nav>
+  );
+}
 
 export function VersionHistory() {
   const { data: versions, loading } = useAllVersions();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const totalCount = versions.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const rawPage = Number.parseInt(searchParams.get("page") ?? "1", 10);
+  const currentPage =
+    Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, totalPages) : 1;
+  const pageVersions = versions.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  function goToPage(page: number) {
+    const nextPage = Math.max(1, Math.min(page, totalPages));
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextPage <= 1) {
+      params.delete("page");
+    } else {
+      params.set("page", String(nextPage));
+    }
+    const query = params.toString();
+    router.push(query ? `/versions?${query}` : "/versions", { scroll: false });
+  }
 
   return (
     <section id="versions" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
@@ -24,57 +158,31 @@ export function VersionHistory() {
       </div>
 
       {loading ? (
-        <div className="mt-6 space-y-4" aria-busy="true" aria-label="Loading releases">
-          {[0, 1, 2].map((key) => (
-            <div key={key} className="card p-6">
-              <div className="h-6 w-24 animate-pulse rounded bg-slate-200" />
-              <div className="mt-3 h-4 w-2/3 animate-pulse rounded bg-slate-100" />
-              <div className="mt-2 h-3 w-1/3 animate-pulse rounded bg-slate-100" />
-            </div>
-          ))}
-        </div>
+        <LoadingSkeleton />
       ) : versions.length === 0 ? (
         <div className="card mt-6 p-8 text-center text-slate-600">
           No releases are available yet. Check back soon for the first download.
         </div>
       ) : (
-        <div className="mt-6 space-y-4">
-          {versions.map((version, index) => {
-            const notes = flattenReleaseNotes(version.releaseNotes).slice(0, 4);
-            return (
-              <article key={version.version} className="card p-6">
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-xl font-semibold text-slate-900">v{version.version}</h3>
-                      {index === 0 && (
-                        <span className="rounded-full bg-brand-purple/10 px-2 py-0.5 text-xs font-semibold text-brand-purple">
-                          Latest
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 text-sm text-slate-600">
-                      {version.summary ?? "CT MCP Plugins release"}
-                    </p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      Released {formatDate(version.publishedAt)} · {formatBytes(version.sizeBytes)}
-                    </p>
-                    {notes.length > 0 && (
-                      <ul className="mt-4 space-y-1 text-sm text-slate-600">
-                        {notes.map((note) => (
-                          <li key={note}>• {note}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <a href={toPublicDownloadUrl(version)} className="btn-primary shrink-0">
-                    Download
-                  </a>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+        <>
+          <div className="mt-6 space-y-4">
+            {pageVersions.map((version, index) => (
+              <ReleaseCard
+                key={version.version}
+                version={version}
+                isLatest={currentPage === 1 && index === 0}
+              />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              onPageChange={goToPage}
+            />
+          )}
+        </>
       )}
     </section>
   );
