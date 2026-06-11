@@ -6,7 +6,7 @@ const nav = [
   { href: "/", label: "Home" },
   { href: "/install", label: "Install" },
   { href: "/#download", label: "Download" },
-  { href: "/#versions", label: "Versions" },
+  { href: "/versions", label: "Versions" },
   { href: "/#extend", label: "Features" },
   {
     href: "https://docs.commercetools.com/dev-tooling/mcp/commerce-mcp",
@@ -28,10 +28,10 @@ export function Header() {
           <Image
             src="/ct-mcp-logo.png"
             alt={BRAND_NAME}
-            width={72}
-            height={48}
+            width={96}
+            height={64}
             priority
-            className="h-10 w-auto"
+            className="h-14 w-auto sm:h-16"
           />
           <span className="max-w-[11rem] text-sm font-bold leading-snug tracking-tight text-slate-900 sm:max-w-xs sm:text-base lg:max-w-md lg:text-lg">
             {BRAND_NAME}

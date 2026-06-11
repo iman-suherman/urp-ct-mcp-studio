@@ -3,7 +3,6 @@ import { DeveloperFriendly } from "@/components/DeveloperFriendly";
 import { ExtendWithEase } from "@/components/ExtendWithEase";
 import { SecureByDesign } from "@/components/SecureByDesign";
 import { Hero } from "@/components/Hero";
-import { VersionHistory } from "@/components/VersionHistory";
 import { VersionHistoryShowcase } from "@/components/VersionHistoryShowcase";
 
 export default function HomePage() {
@@ -14,7 +13,6 @@ export default function HomePage() {
       <SecureByDesign />
       <DeveloperFriendly />
       <VersionHistoryShowcase />
-      <VersionHistory />
       <CtaBanner />
     </>
   );

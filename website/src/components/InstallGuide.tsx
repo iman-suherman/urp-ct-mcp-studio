@@ -75,7 +75,7 @@ export async function InstallGuide() {
           <a href={downloadUrl} className="btn-primary">
             Download v{versionLabel}
           </a>
-          <Link href="/#versions" className="btn-secondary">
+          <Link href="/versions" className="btn-secondary">
             Browse all versions
           </Link>
         </div>

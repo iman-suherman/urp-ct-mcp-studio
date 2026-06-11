@@ -28,7 +28,7 @@ export async function CtaBanner() {
             <a href={downloadUrl} className="btn-cta-primary">
               Download latest VSIX
             </a>
-            <Link href="#versions" className="btn-cta-secondary">
+            <Link href="/versions" className="btn-cta-secondary">
               Browse versions
             </Link>
           </div>

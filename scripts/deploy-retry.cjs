@@ -22,7 +22,9 @@ function parseArgs(argv) {
 }
 
 function needsRetry(rs, lastDeploy) {
-  if (rs.status === "in_progress" || rs.status === "queued") return false;
+  if (rs.status === "in_progress") return false;
+  if (rs.status === "queued" && !rs.pid && !rs.currentDeploymentId) return true;
+  if (rs.status === "queued") return false;
   const outcome = lastDeploy?.status;
   if (outcome === "failure" || outcome === "cancelled") return true;
   return Boolean(rs.headSha && rs.headSha !== rs.lastDeployedSha);

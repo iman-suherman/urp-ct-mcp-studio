@@ -18,6 +18,7 @@ const {
   relativeLogPath,
   upsertDeployment,
   findDeployment,
+  recordActivity,
 } = require("./deploy-store.cjs");
 const { loadDotenv } = require("./load-dotenv.cjs");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
@@ -78,6 +79,28 @@ function logMsg(background, msg) {
   if (!background) {
     console.log(msg);
   }
+}
+
+function abortEarly(repo, sha, reason, background) {
+  updateState((state) => {
+    const rs = getRepoState(state, repo);
+    rs.status = "idle";
+    rs.currentDeploymentId = null;
+    rs.pid = null;
+    rs.lastError = reason;
+    recordActivity(state, {
+      type: "failure",
+      repo,
+      sha,
+      shortSha: sha ? sha.slice(0, 7) : null,
+      message: reason,
+    });
+    return state;
+  });
+  if (!background) {
+    console.error(`error: ${reason}`);
+  }
+  process.exit(1);
 }
 
 function runDeploy(target, logFile, deploymentId, background) {
@@ -189,6 +212,23 @@ function finishDeploy({
       npmScript: target.npmScript,
       pid: null,
     });
+    recordActivity(state, {
+      type: status,
+      repo,
+      deploymentId,
+      sha,
+      shortSha: sha.slice(0, 7),
+      durationMs,
+      logFile: relLog,
+      exitCode,
+      signal,
+      message:
+        status === "success"
+          ? `deployed in ${Math.round(durationMs / 1000)}s`
+          : status === "cancelled"
+            ? "deploy cancelled"
+            : `exit ${exitCode}`,
+    });
     return state;
   });
 
@@ -210,30 +250,28 @@ async function main() {
   const { repo, sha: shaArg, background } = parseArgs(process.argv.slice(2));
   const target = getDeployTarget(repo);
 
-  if (!target) {
-    console.error(`error: unknown target ${repo}`);
-    process.exit(1);
-  }
-  if (!target.npmScript) {
-    console.error(`error: ${repo} has no auto-deploy (${target.note || "disabled"})`);
-    process.exit(1);
-  }
-  if (!isDeployConfigured()) {
-    console.error("error: GCP not configured (run: npm run login)");
-    process.exit(1);
-  }
-
   const branch = gitBranch();
   const sha = shaArg || gitHead();
+
+  if (!target) {
+    abortEarly(repo, sha, `unknown target ${repo}`, background);
+  }
+  if (!target.npmScript) {
+    abortEarly(repo, sha, `${repo} has no auto-deploy`, background);
+  }
+  if (!isDeployConfigured()) {
+    abortEarly(repo, sha, "GCP not configured (run: npm run login)", background);
+  }
   if (!sha) {
-    console.error("error: could not resolve HEAD");
-    process.exit(1);
+    abortEarly(repo, null, "could not resolve HEAD", background);
   }
 
   const existing = readState();
   const rsExisting = getRepoState(existing, repo);
   if (rsExisting.status === "in_progress") {
-    console.log(`deploy-runner: skip — ${repo} already in progress`);
+    if (!background) {
+      console.log(`deploy-runner: skip — ${repo} already in progress`);
+    }
     process.exit(0);
   }
 
@@ -250,6 +288,14 @@ async function main() {
     rs.currentDeploymentId = deploymentId;
     rs.lastError = null;
     rs.pid = null;
+    recordActivity(state, {
+      type: "started",
+      repo,
+      deploymentId,
+      sha,
+      shortSha: sha.slice(0, 7),
+      message: `npm run ${target.npmScript}`,
+    });
     upsertDeployment(state, {
       id: deploymentId,
       repo,

@@ -23,15 +23,148 @@ function defaultState() {
     updatedAt: new Date().toISOString(),
     repos: {},
     deployments: [],
+    activities: [],
   };
 }
 
 const TERMINAL_REPO_STATUSES = new Set(["success", "failure", "cancelled"]);
 
+function isStuckQueued(rs) {
+  return rs?.status === "queued" && !rs.pid && !rs.currentDeploymentId;
+}
+
 function normalizeRepoStatus(rs) {
-  if (rs && TERMINAL_REPO_STATUSES.has(rs.status)) {
+  if (!rs) return;
+  if (TERMINAL_REPO_STATUSES.has(rs.status)) {
     rs.status = "idle";
   }
+  if (isStuckQueued(rs)) {
+    rs.status = "idle";
+    if (!rs.lastError) {
+      rs.lastError = "Deploy never started (stuck queued — run: npm run deploy:retry)";
+    }
+  }
+}
+
+function recordActivity(state, activity) {
+  if (!state.activities) state.activities = [];
+  state.activities.unshift({
+    at: new Date().toISOString(),
+    ...activity,
+  });
+  const max = Number.parseInt(process.env.CT_MCP_ACTIVITY_MAX || "80", 10);
+  if (state.activities.length > max) {
+    state.activities = state.activities.slice(0, max);
+  }
+}
+
+function isPidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function reconcileState(state) {
+  let changed = false;
+
+  for (const [repo, rs] of Object.entries(state.repos || {})) {
+    if (!rs.lastDeploymentId) {
+      const latest = (state.deployments || []).find((d) => d.repo === repo);
+      if (latest) {
+        rs.lastDeploymentId = latest.id;
+        changed = true;
+      }
+    }
+
+    const before = JSON.stringify(rs);
+
+    if (rs.status === "in_progress" && rs.pid && !isPidAlive(rs.pid)) {
+      const finishedAt = new Date().toISOString();
+      const deploymentId = rs.currentDeploymentId;
+      rs.status = "idle";
+      rs.pid = null;
+      rs.currentDeploymentId = null;
+      if (!rs.lastError) {
+        rs.lastError = "deploy process exited unexpectedly";
+      }
+      if (deploymentId) {
+        const dep = findDeployment(state, deploymentId);
+        if (dep && dep.status === "in_progress") {
+          const durationMs = dep.startedAt
+            ? Date.now() - new Date(dep.startedAt).getTime()
+            : null;
+          upsertDeployment(state, {
+            ...dep,
+            status: "failure",
+            finishedAt,
+            durationMs,
+            exitCode: dep.exitCode ?? 1,
+            pid: null,
+          });
+          rs.lastDeploymentId = deploymentId;
+          recordActivity(state, {
+            type: "failure",
+            repo: dep.repo,
+            deploymentId,
+            sha: dep.sha,
+            shortSha: dep.shortSha,
+            message: rs.lastError,
+            logFile: dep.logFile,
+          });
+        }
+      }
+    }
+
+    normalizeRepoStatus(rs);
+    if (JSON.stringify(rs) !== before) {
+      changed = true;
+    }
+  }
+
+  for (const dep of state.deployments || []) {
+    if (dep.status !== "in_progress") continue;
+    const rs = state.repos[dep.repo];
+    if (!rs || rs.currentDeploymentId !== dep.id) {
+      const finishedAt = new Date().toISOString();
+      const durationMs = dep.startedAt
+        ? Date.now() - new Date(dep.startedAt).getTime()
+        : null;
+      const message = "deployment orphaned (process no longer tracked)";
+      upsertDeployment(state, {
+        ...dep,
+        status: "failure",
+        finishedAt,
+        durationMs,
+        exitCode: dep.exitCode ?? 1,
+        pid: null,
+      });
+      if (rs) {
+        rs.lastDeploymentId = dep.id;
+        if (!rs.lastError) rs.lastError = message;
+        if (rs.status !== "idle") {
+          rs.status = "idle";
+          rs.pid = null;
+          rs.currentDeploymentId = null;
+        }
+      }
+      recordActivity(state, {
+        type: "failure",
+        repo: dep.repo,
+        deploymentId: dep.id,
+        sha: dep.sha,
+        shortSha: dep.shortSha,
+        message,
+        logFile: dep.logFile,
+      });
+      changed = true;
+    }
+  }
+
+  return changed;
 }
 
 function readState() {
@@ -41,15 +174,17 @@ function readState() {
   }
   try {
     const data = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    for (const rs of Object.values(data.repos || {})) {
-      normalizeRepoStatus(rs);
-    }
-    return {
+    const state = {
       ...defaultState(),
       ...data,
       repos: data.repos || {},
       deployments: data.deployments || [],
+      activities: data.activities || [],
     };
+    if (reconcileState(state)) {
+      return writeState(state);
+    }
+    return state;
   } catch {
     return defaultState();
   }
@@ -146,4 +281,6 @@ module.exports = {
   getRepoState,
   findDeployment,
   upsertDeployment,
+  isStuckQueued,
+  recordActivity,
 };

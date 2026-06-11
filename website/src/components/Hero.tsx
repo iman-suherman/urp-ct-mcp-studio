@@ -2,8 +2,6 @@ import Link from "next/link";
 import { LocalReleaseDate } from "@/components/LocalReleaseDate";
 import {
   fetchLatestVersion,
-  flattenReleaseNotes,
-  formatBytes,
   publishedAtToIso,
   DOWNLOAD_BASE_URL,
   toPublicDownloadUrl,
@@ -16,14 +14,13 @@ export async function Hero() {
     : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
   const versionLabel = latest?.version ?? "0.1.0";
   const releasedAtIso = publishedAtToIso(latest?.publishedAt);
-  const highlights = flattenReleaseNotes(latest?.releaseNotes).slice(0, 3);
 
   return (
     <section id="home" className="mx-auto max-w-7xl px-6 py-16 lg:py-24">
       <span className="inline-flex rounded-full bg-brand-purple/10 px-4 py-1.5 text-sm font-semibold uppercase tracking-wide text-brand-purple">
         Commerce MCP extension for VS Code
       </span>
-      <h1 className="mt-6 max-w-4xl text-5xl font-bold leading-[1.1] tracking-tight text-slate-900 md:text-6xl lg:text-7xl">
+      <h1 className="mt-6 max-w-4xl text-5xl font-bold leading-[1.1] tracking-tight text-slate-900 md:text-6xl lg:max-w-none lg:whitespace-nowrap lg:text-[3.25rem] xl:text-7xl">
         Connect, explore, and run{" "}
         <span className="gradient-text">MCP tools from your editor.</span>
       </h1>
@@ -37,7 +34,7 @@ export async function Hero() {
           <a href={downloadUrl} className="btn-primary px-7 py-4 text-base">
             Download v{versionLabel}
           </a>
-          <Link href="#versions" className="btn-secondary px-7 py-4 text-base">
+          <Link href="/versions" className="btn-secondary px-7 py-4 text-base">
             View release history
           </Link>
           <Link href="/install" className="btn-secondary px-7 py-4 text-base">
@@ -54,25 +51,6 @@ export async function Hero() {
         <span>Local stdio transport</span>
         <span>commercetools compatible</span>
       </div>
-
-      {latest && (
-        <div className="card mt-10 max-w-3xl p-8">
-          <p className="text-base font-semibold text-slate-900">Latest release</p>
-          <p className="mt-2 text-lg text-slate-600">
-            {latest.summary ?? `Commerce MCP Studio ${versionLabel}`}
-          </p>
-          <p className="mt-3 text-sm text-slate-500">
-            {formatBytes(latest.sizeBytes)} · VSIX for VS Code 1.90+
-          </p>
-          {highlights.length > 0 && (
-            <ul className="mt-4 space-y-2 text-base text-slate-600">
-              {highlights.map((item) => (
-                <li key={item}>• {item}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
     </section>
   );
 }

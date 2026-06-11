@@ -27,6 +27,9 @@ export function Footer() {
             <Link href="/install" className="hover:text-brand-purple">
               Install guide
             </Link>
+            <Link href="/versions" className="hover:text-brand-purple">
+              Versions
+            </Link>
             <Link href="/#download" className="hover:text-brand-purple">
               Download
             </Link>

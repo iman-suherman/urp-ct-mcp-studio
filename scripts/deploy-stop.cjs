@@ -9,6 +9,7 @@ const {
   getRepoState,
   findDeployment,
   upsertDeployment,
+  recordActivity,
 } = require("./deploy-store.cjs");
 
 function parseArgs(argv) {
@@ -67,6 +68,13 @@ async function stopRepo(repo) {
       r.lastDeploymentId = deploymentId;
     }
     r.currentDeploymentId = null;
+    recordActivity(s, {
+      type: "cancelled",
+      repo,
+      deploymentId,
+      pid: rs.pid,
+      message: killed ? "stopped via SIGTERM" : "marked cancelled (no pid)",
+    });
     return s;
   });
 

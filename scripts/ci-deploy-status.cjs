@@ -32,6 +32,7 @@ const boldYellow = (t) => bold(yellow(t));
 const boldCyan = (t) => bold(cyan(t));
 
 const LOG_TAIL_LINES = Number.parseInt(process.env.CT_MCP_CI_LOG_LINES || "12", 10);
+const ACTIVITY_LINES = Number.parseInt(process.env.CT_MCP_CI_ACTIVITY_LINES || "8", 10);
 
 const TABLE = {
   component: 30,
@@ -51,12 +52,13 @@ function parseArgs(argv) {
     } else if (argv[i] === "-h" || argv[i] === "--help") {
       console.log(`Usage: npm run ci [-- --once] [--interval <sec>]
 
-  npm run ci                         live dashboard (Ctrl+C safe)
-  npm run ci -- --once               snapshot
-  npm run deploy:stop -- --repo <n>  interrupt deploy
+  npm run ci                         live dashboard (keeps watching; Ctrl+C to stop)
+  npm run ci -- --once               snapshot and exit
+  npm run deploy:stop -- --repo <n>  interrupt a running deploy
   npm run deploy:retry               retry failed/pending targets
 
   CT_MCP_CI_LOG_LINES=12             log tail lines (default 12)
+  CT_MCP_CI_INTERVAL=2               refresh interval in seconds (default 2)
 `);
       process.exit(0);
     }
@@ -158,6 +160,37 @@ function formatDuration(ms) {
   return `${min}m ${sec % 60}s`;
 }
 
+/** True only when a deploy process is actually running (not stuck queued). */
+function isActiveDeploy(rs) {
+  if (!rs) return false;
+  if (rs.status === "in_progress") return true;
+  if (rs.status === "queued" && (rs.pid || rs.currentDeploymentId)) return true;
+  return false;
+}
+
+function activityLabel(type) {
+  switch (type) {
+    case "success":
+      return green("✓");
+    case "failure":
+    case "spawn_failed":
+      return red("✗");
+    case "cancelled":
+      return magenta("⊘");
+    case "started":
+      return yellow("⟳");
+    case "triggered":
+    case "spawned":
+      return cyan("→");
+    case "stale_recovered":
+      return yellow("↻");
+    case "trigger_skipped":
+      return dim("·");
+    default:
+      return dim("·");
+  }
+}
+
 function statusLabel(status) {
   switch (status) {
     case "in_progress":
@@ -239,24 +272,34 @@ function summarize(state) {
   let failed = 0;
   let pending = 0;
   let everDeployed = false;
+  const pendingRepos = [];
+  const failedRepos = [];
 
   for (const target of DEPLOY_TARGETS) {
     const rs = state.repos[target.repo] || {};
     if (head) rs.headSha = head;
 
-    const activeStatus =
-      rs.status === "in_progress" || rs.status === "queued" ? rs.status : null;
-    const lastDeploy = rs.lastDeploymentId
+    const activeStatus = isActiveDeploy(rs) ? rs.status : null;
+    let lastDeploy = rs.lastDeploymentId
       ? findDeployment(state, rs.lastDeploymentId)
       : null;
+    if (!lastDeploy) {
+      lastDeploy = (state.deployments || []).find((d) => d.repo === target.repo) || null;
+    }
     const lastOutcome = lastDeploy?.status || null;
     const rowStatus = activeStatus || "idle";
     const pendingDeploy = isPendingDeploy(rs, lastDeploy);
 
     if (lastDeploy) everDeployed = true;
     if (activeStatus) active += 1;
-    if (!activeStatus && lastOutcome === "failure") failed += 1;
-    if (!activeStatus && pendingDeploy) pending += 1;
+    if (!activeStatus && lastOutcome === "failure") {
+      failed += 1;
+      failedRepos.push({ repo: target.repo, label: target.label });
+    }
+    if (!activeStatus && pendingDeploy) {
+      pending += 1;
+      pendingRepos.push({ repo: target.repo, label: target.label, headSha: rs.headSha });
+    }
 
     const current = rs.currentDeploymentId
       ? findDeployment(state, rs.currentDeploymentId)
@@ -270,6 +313,7 @@ function summarize(state) {
       label: target.label,
       deployable: Boolean(target.npmScript),
       note: target.note,
+      details: target.details,
       status: rowStatus,
       lastOutcome,
       pendingDeploy,
@@ -288,7 +332,7 @@ function summarize(state) {
     });
   }
 
-  return { rows, active, failed, pending, everDeployed };
+  return { rows, active, failed, pending, pendingRepos, failedRepos, everDeployed };
 }
 
 const TABLE_SEP = dim(" │ ");
@@ -319,11 +363,20 @@ function tableHeader() {
   ]);
 }
 
-function buildStatusBoxLines(state, rows, active, failed, pending, everDeployed) {
+function buildStatusBoxLines(
+  state,
+  rows,
+  active,
+  failed,
+  pending,
+  pendingRepos,
+  failedRepos,
+  everDeployed,
+) {
   const relState = path.relative(process.cwd(), STATE_FILE) || STATE_FILE;
   const lines = [
     dim(`State: ${relState}`),
-    dim(`Updated: ${state.updatedAt || "—"}  ·  Ctrl+C exits dashboard only`),
+    dim(`Updated: ${state.updatedAt || "—"}  ·  Ctrl+C to stop watching`),
     "",
     tableHeader(),
     tableSep(),
@@ -340,6 +393,13 @@ function buildStatusBoxLines(state, rows, active, failed, pending, everDeployed)
           dim(padPlain(truncatePlain(row.note || "", TABLE.lastRun), TABLE.lastRun)),
         ]),
       );
+      if (row.details?.length) {
+        for (const detail of row.details) {
+          lines.push(dim(`  ↳ ${detail}`));
+        }
+      } else if (row.note) {
+        lines.push(dim(`  ↳ ${row.note}`));
+      }
       continue;
     }
 
@@ -383,6 +443,8 @@ function buildStatusBoxLines(state, rows, active, failed, pending, everDeployed)
     }
     if (row.status === "idle" && isUpToDate(row)) {
       lines.push(green(`  ↳ deployed and up to date`));
+    } else     if (row.status === "idle" && row.error && !row.lastOutcome) {
+      lines.push(yellow(`  ↳ ${row.error}`));
     } else if (row.status === "idle" && row.pendingDeploy) {
       const retryHint = `  ↳ new commit ${row.headSha} — npm run deploy:retry -- --repo ${row.repo}`;
       lines.push(row.lastOutcome === "success" ? dim(retryHint) : yellow(retryHint));
@@ -404,9 +466,16 @@ function buildStatusBoxLines(state, rows, active, failed, pending, everDeployed)
   } else if (pending > 0 || failed > 0) {
     if (pending > 0) {
       lines.push(yellow(`${pending} target(s) have undeployed commits`));
+      for (const target of pendingRepos) {
+        const head = target.headSha ? target.headSha.slice(0, 7) : "—";
+        lines.push(yellow(`  ↳ ${target.repo} (${target.label}) — HEAD ${head}`));
+      }
     }
     if (failed > 0) {
       lines.push(red(`${failed} target(s) last deploy failed`));
+      for (const target of failedRepos) {
+        lines.push(red(`  ↳ ${target.repo} (${target.label})`));
+      }
     }
     lines.push(dim("Retry all:  npm run deploy:retry"));
   } else if (!everDeployed) {
@@ -414,29 +483,23 @@ function buildStatusBoxLines(state, rows, active, failed, pending, everDeployed)
     lines.push(dim("Push website changes or run: npm run deploy:retry -- --repo ct-mcp-website"));
   } else {
     lines.push(green("All deployable targets idle and up to date."));
+    lines.push(dim("Watching for new commits and deploys — Ctrl+C to stop"));
   }
 
   return lines;
 }
 
-function needsAttention(row) {
-  return (
-    row.logLive ||
-    row.pendingDeploy ||
-    row.lastOutcome === "failure" ||
-    row.lastOutcome === "cancelled"
-  );
-}
+function printLogSection(title, rows, options = {}) {
+  const { liveOnly = false } = options;
 
-function printLogSection(title, rows) {
   const logRows = rows
     .filter((row) => {
       if (!row.deployable || !row.logFile) return false;
-      if (!needsAttention(row)) return false;
-      return row.logLive || row.logTail.length > 0;
+      if (liveOnly && !row.logLive) return false;
+      if (!liveOnly && row.logLive) return false;
+      return row.logTail.length > 0 || row.logLive;
     })
     .sort((a, b) => {
-      if (a.logLive !== b.logLive) return a.logLive ? -1 : 1;
       const ta = a.lastRun ? new Date(a.lastRun).getTime() : 0;
       const tb = b.lastRun ? new Date(b.lastRun).getTime() : 0;
       return tb - ta;
@@ -459,46 +522,103 @@ function printLogSection(title, rows) {
       ? boldYellow("live")
       : row.lastOutcome === "success"
         ? green("last deploy")
-        : blue("last deploy");
+        : row.lastOutcome === "failure"
+          ? red("last deploy")
+          : blue("last deploy");
     const dur =
       !row.logLive && row.duration != null
         ? dim(` · ${formatDuration(row.duration)}`)
         : "";
     const when = row.lastRun ? dim(` · ${formatRelativeTime(row.lastRun)}`) : "";
+    const shaHint =
+      row.deployedSha !== "—" && !row.logLive
+        ? dim(` · ${row.deployedSha}`)
+        : "";
 
     const labelColor =
-      row.lastOutcome === "success" ? boldGreen : row.logLive ? boldCyan : boldCyan;
-    const logLineColor = row.lastOutcome === "success" ? green : cyan;
-    const logPathColor = row.lastOutcome === "success" ? (t) => dim(green(t)) : dim;
+      row.lastOutcome === "success" && !row.logLive
+        ? boldGreen
+        : row.logLive
+          ? boldCyan
+          : row.lastOutcome === "failure"
+            ? boldRed
+            : boldCyan;
+    const logLineColor =
+      row.lastOutcome === "success" && !row.logLive ? green : row.logLive ? cyan : cyan;
+    const logPathColor =
+      row.lastOutcome === "success" && !row.logLive ? (t) => dim(green(t)) : dim;
 
-    console.log(`${labelColor(row.label)}  ${mode}  ${st.color(st.text)}${when}${dur}`);
+    console.log(
+      `${labelColor(row.label)}  ${mode}  ${st.color(st.text)}${when}${dur}${shaHint}`,
+    );
+    if (row.error && row.lastOutcome === "failure") {
+      console.log(red(`  ↳ ${row.error}`));
+    }
     console.log(logPathColor(`  ${row.logFile}`));
 
-    const tail = row.logTail.length > 0 ? row.logTail : ["(waiting for log output…)"];
+    const tail = row.logLive
+      ? row.logTail.length > 0
+        ? row.logTail
+        : ["(waiting for log output…)"]
+      : row.logTail;
     for (const line of tail) {
       console.log(logLineColor(`  ${sanitizeTerminal(line)}`));
     }
   }
 }
 
+function printActivitySection(state) {
+  const items = (state.activities || []).slice(0, ACTIVITY_LINES);
+  if (items.length === 0) return;
+
+  console.log("");
+  console.log(bold("Recent activity"));
+
+  for (const item of items) {
+    const when = formatRelativeTime(item.at);
+    const repo = item.repo ? dim(`${item.repo} `) : "";
+    const sha = item.shortSha ? dim(`${item.shortSha} `) : "";
+    const msg = item.message || item.type || "";
+    console.log(
+      `${activityLabel(item.type)} ${repo}${sha}${dim(when)}  ${sanitizeTerminal(msg)}`,
+    );
+    if (item.logFile && (item.type === "success" || item.type === "failure")) {
+      console.log(dim(`    log: ${item.logFile}`));
+    }
+  }
+}
+
 function printDashboard(state) {
-  const { rows, active, failed, pending, everDeployed } = summarize(state);
+  const { rows, active, failed, pending, pendingRepos, failedRepos, everDeployed } =
+    summarize(state);
 
   clearScreen();
   renderBox(
-    "CT MCP local deployments",
-    buildStatusBoxLines(state, rows, active, failed, pending, everDeployed),
+    "suherman.net local deployment",
+    buildStatusBoxLines(
+      state,
+      rows,
+      active,
+      failed,
+      pending,
+      pendingRepos,
+      failedRepos,
+      everDeployed,
+    ),
   );
 
-  const logTitle = active > 0 ? "Deploy logs (live)" : "Last deployment logs";
-  printLogSection(logTitle, rows);
+  if (active > 0) {
+    printLogSection("Deploy logs (live)", rows, { liveOnly: true });
+  }
+  printLogSection("Last deployment results", rows, { liveOnly: false });
+  printActivitySection(state);
 }
 
 async function main() {
   const { once, intervalMs } = parseArgs(process.argv.slice(2));
 
   process.on("SIGINT", () => {
-    console.log(dim("\nDashboard closed. Deployments still running — npm run ci"));
+    console.log(dim("\nStopped watching. Deployments still run in the background — npm run ci"));
     process.exit(0);
   });
 
@@ -507,18 +627,24 @@ async function main() {
     if (process.stdout.isTTY) {
       printDashboard(state);
     } else {
-      const { rows, failed, pending } = summarize(state);
-      for (const row of rows) {
+      const summary = summarize(state);
+      for (const row of summary.rows) {
         if (!row.deployable) continue;
         console.log(
           `${row.repo}\t${row.status}\t${row.lastOutcome || ""}\t${row.lastLine || ""}\t${row.logFile || ""}`,
         );
       }
-      if (once) process.exit(failed > 0 || pending > 0 ? 1 : 0);
+      if (once) {
+        process.exit(summary.failed > 0 || summary.pending > 0 ? 1 : 0);
+      }
     }
 
     const { active, failed, pending } = summarize(state);
-    if (once || active === 0) {
+    if (process.stdout.isTTY) {
+      if (once) {
+        process.exit(failed > 0 || pending > 0 ? 1 : 0);
+      }
+    } else if (once || active === 0) {
       process.exit(failed > 0 || pending > 0 ? 1 : 0);
     }
 
