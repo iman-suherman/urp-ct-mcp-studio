@@ -15,6 +15,10 @@ logs/*
 # Project-local Google ADC (created by npm run login — do not commit)
 .gcloud/application_default_credentials.json
 
-# Cursor IDE rules (local only)
+# Cursor IDE (local only)
 .cursor/rules/
+.cursor/mcp.json
 .env.mcp
+
+# VS Code (local only)
+.vscode/settings.json
