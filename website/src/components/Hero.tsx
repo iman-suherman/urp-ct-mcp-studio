@@ -1,7 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { LocalReleaseDate } from "@/components/LocalReleaseDate";
+import { useLatestVersion } from "@/hooks/useRegistry";
 import {
-  fetchLatestVersion,
   flattenReleaseNotes,
   formatBytes,
   publishedAtToIso,
@@ -9,12 +11,12 @@ import {
   toPublicDownloadUrl,
 } from "@/lib/registry";
 
-export async function Hero() {
-  const latest = await fetchLatestVersion();
-  const downloadUrl = latest
-    ? toPublicDownloadUrl(latest)
-    : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
-  const versionLabel = latest?.version ?? "0.1.0";
+const FALLBACK_DOWNLOAD_URL = `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
+
+export function Hero() {
+  const { data: latest, loading } = useLatestVersion();
+  const downloadUrl = latest ? toPublicDownloadUrl(latest) : FALLBACK_DOWNLOAD_URL;
+  const versionLabel = latest?.version;
   const releasedAtIso = publishedAtToIso(latest?.publishedAt);
   const highlights = flattenReleaseNotes(latest?.releaseNotes).slice(0, 3);
 
@@ -40,7 +42,7 @@ export async function Hero() {
                 href={downloadUrl}
                 className="btn-primary w-full shrink-0 whitespace-nowrap px-5 py-3 text-sm sm:w-auto sm:px-6 sm:py-3 lg:px-5"
               >
-                Download v{versionLabel}
+                {loading || !versionLabel ? "Download latest VSIX" : `Download v${versionLabel}`}
               </a>
               <Link
                 href="/versions"
@@ -67,7 +69,21 @@ export async function Hero() {
           </div>
         </div>
 
-        {latest && (
+        {loading && (
+          <aside
+            aria-label="Latest release"
+            aria-busy="true"
+            className="border-t border-slate-200/50 pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0 xl:pl-12"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-purple/80">
+              Latest release
+            </p>
+            <div className="mt-3 h-5 w-3/4 animate-pulse rounded bg-slate-200" />
+            <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-slate-100" />
+          </aside>
+        )}
+
+        {!loading && latest && (
           <aside
             aria-label="Latest release"
             className="border-t border-slate-200/50 pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0 xl:pl-12"

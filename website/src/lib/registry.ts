@@ -107,29 +107,6 @@ export function publishedAtToIso(value?: PluginVersion["publishedAt"]): string |
   return new Date(seconds * 1000).toISOString();
 }
 
-async function fetchJson<T>(path: string): Promise<T | null> {
-  try {
-    const res = await fetch(`${REGISTRY_API_URL}${path}`, {
-      next: { revalidate: 60 },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchLatestVersion(): Promise<PluginVersion | null> {
-  return fetchJson<PluginVersion>(`/api/v1/plugins/${PLUGIN_ID}/versions/latest`);
-}
-
-export async function fetchAllVersions(): Promise<PluginVersion[]> {
-  const data = await fetchJson<VersionsResponse>(
-    `/api/v1/plugins/${PLUGIN_ID}/versions`
-  );
-  return data?.versions ?? [];
-}
-
 export function flattenReleaseNotes(notes?: ReleaseNotes): string[] {
   if (!notes) return [];
   return [

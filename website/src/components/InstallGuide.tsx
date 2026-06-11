@@ -1,11 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { LocalReleaseDate } from "@/components/LocalReleaseDate";
+import { useLatestVersion } from "@/hooks/useRegistry";
 import {
   DOWNLOAD_BASE_URL,
-  fetchLatestVersion,
   publishedAtToIso,
   toPublicDownloadUrl,
 } from "@/lib/registry";
+
+const FALLBACK_DOWNLOAD_URL = `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
 
 const steps = [
   {
@@ -45,13 +49,13 @@ const steps = [
   },
 ];
 
-export async function InstallGuide() {
-  const latest = await fetchLatestVersion();
-  const downloadUrl = latest
-    ? toPublicDownloadUrl(latest)
-    : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
-  const versionLabel = latest?.version ?? "0.1.0";
+export function InstallGuide() {
+  const { data: latest, loading } = useLatestVersion();
+  const downloadUrl = latest ? toPublicDownloadUrl(latest) : FALLBACK_DOWNLOAD_URL;
+  const versionLabel = latest?.version;
   const releasedAtIso = publishedAtToIso(latest?.publishedAt);
+  const downloadLabel =
+    loading || !versionLabel ? "Download latest VSIX" : `Download v${versionLabel}`;
 
   return (
     <article className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:py-12">
@@ -73,7 +77,7 @@ export async function InstallGuide() {
       <div className="mt-8 flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-4">
           <a href={downloadUrl} className="btn-primary">
-            Download v{versionLabel}
+            {downloadLabel}
           </a>
           <Link href="/versions" className="btn-secondary">
             Browse all versions
@@ -96,8 +100,11 @@ export async function InstallGuide() {
                 <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
                 <p className="mt-2 text-sm text-slate-500">{step.detail}</p>
                 {index === 0 && (
-                  <a href={downloadUrl} className="mt-4 inline-flex text-sm font-semibold text-brand-purple hover:underline">
-                    Download v{versionLabel} →
+                  <a
+                    href={downloadUrl}
+                    className="mt-4 inline-flex text-sm font-semibold text-brand-purple hover:underline"
+                  >
+                    {downloadLabel} →
                   </a>
                 )}
               </div>

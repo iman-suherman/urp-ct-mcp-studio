@@ -1,13 +1,15 @@
+"use client";
+
+import { useAllVersions } from "@/hooks/useRegistry";
 import {
-  fetchAllVersions,
   flattenReleaseNotes,
   formatBytes,
   formatDate,
   toPublicDownloadUrl,
 } from "@/lib/registry";
 
-export async function VersionHistory() {
-  const versions = await fetchAllVersions();
+export function VersionHistory() {
+  const { data: versions, loading } = useAllVersions();
 
   return (
     <section id="versions" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
@@ -21,7 +23,17 @@ export async function VersionHistory() {
         </p>
       </div>
 
-      {versions.length === 0 ? (
+      {loading ? (
+        <div className="mt-6 space-y-4" aria-busy="true" aria-label="Loading releases">
+          {[0, 1, 2].map((key) => (
+            <div key={key} className="card p-6">
+              <div className="h-6 w-24 animate-pulse rounded bg-slate-200" />
+              <div className="mt-3 h-4 w-2/3 animate-pulse rounded bg-slate-100" />
+              <div className="mt-2 h-3 w-1/3 animate-pulse rounded bg-slate-100" />
+            </div>
+          ))}
+        </div>
+      ) : versions.length === 0 ? (
         <div className="card mt-6 p-8 text-center text-slate-600">
           No releases are available yet. Check back soon for the first download.
         </div>

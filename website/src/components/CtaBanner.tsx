@@ -1,15 +1,14 @@
-import Link from "next/link";
-import {
-  DOWNLOAD_BASE_URL,
-  fetchLatestVersion,
-  toPublicDownloadUrl,
-} from "@/lib/registry";
+"use client";
 
-export async function CtaBanner() {
-  const latest = await fetchLatestVersion();
-  const downloadUrl = latest
-    ? toPublicDownloadUrl(latest)
-    : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
+import Link from "next/link";
+import { useLatestVersion } from "@/hooks/useRegistry";
+import { DOWNLOAD_BASE_URL, toPublicDownloadUrl } from "@/lib/registry";
+
+const FALLBACK_DOWNLOAD_URL = `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
+
+export function CtaBanner() {
+  const { data: latest } = useLatestVersion();
+  const downloadUrl = latest ? toPublicDownloadUrl(latest) : FALLBACK_DOWNLOAD_URL;
 
   return (
     <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 sm:pb-8">
@@ -26,7 +25,7 @@ export async function CtaBanner() {
           </div>
           <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
             <a href={downloadUrl} className="btn-cta-primary">
-              Download latest VSIX
+              {latest ? `Download v${latest.version}` : "Download latest VSIX"}
             </a>
             <Link href="/versions" className="btn-cta-secondary">
               Browse versions
