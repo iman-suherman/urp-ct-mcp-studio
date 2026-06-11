@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function VersionsPage() {
   return (
     <>
-      <div className="mx-auto max-w-7xl px-6 pt-10 lg:pt-14">
+      <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 sm:pt-10 lg:pt-12">
         <Link href="/" className="text-sm font-medium text-brand-purple hover:underline">
           ← Back to home
         </Link>

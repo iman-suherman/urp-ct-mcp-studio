@@ -9,9 +9,11 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
+  overflow-x: hidden;
   color: var(--foreground);
   background:
     radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 28%),

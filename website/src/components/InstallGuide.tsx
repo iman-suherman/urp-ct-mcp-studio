@@ -54,7 +54,7 @@ export async function InstallGuide() {
   const releasedAtIso = publishedAtToIso(latest?.publishedAt);
 
   return (
-    <article className="mx-auto max-w-3xl px-6 py-10 lg:py-14">
+    <article className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:py-12">
       <Link href="/" className="text-sm font-medium text-brand-purple hover:underline">
         ← Back to home
       </Link>

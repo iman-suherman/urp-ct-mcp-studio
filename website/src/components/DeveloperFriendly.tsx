@@ -52,13 +52,13 @@ const footerHighlights = [
 
 export function DeveloperFriendly() {
   return (
-    <section id="developer" className="mx-auto max-w-7xl px-6 py-12">
-      <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
+    <section id="developer" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-10">
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-center lg:gap-8">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-brand-purple">
             Developer Friendly
           </p>
-          <h2 className="mt-3 text-3xl font-bold text-slate-900 md:text-4xl">
+          <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:mt-3 sm:text-3xl md:text-4xl">
             Browse tools dynamically, run MCP calls in a playground, and sync native VS Code Chat config.
           </h2>
 
@@ -79,8 +79,8 @@ export function DeveloperFriendly() {
           </ul>
         </div>
 
-        <div className="relative">
-          <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-purple/20 via-brand-yellow/10 to-transparent blur-2xl" />
+        <div className="relative overflow-hidden">
+          <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-brand-purple/20 via-brand-yellow/10 to-transparent blur-2xl md:-inset-6" />
           <div className="card relative overflow-hidden p-3 shadow-card">
             <Image
               src="/developer-friendly.png"
@@ -93,7 +93,7 @@ export function DeveloperFriendly() {
         </div>
       </div>
 
-      <div className="mt-10">
+      <div className="mt-6 sm:mt-8">
         <p className="text-sm font-semibold uppercase tracking-wide text-brand-purple">
           Sync to VS Code Chat
         </p>
@@ -114,7 +114,7 @@ export function DeveloperFriendly() {
         </ol>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:mt-6 sm:grid-cols-2 xl:grid-cols-4">
         {footerHighlights.map((item) => (
           <div
             key={item.title}

@@ -5,7 +5,7 @@ const GITHUB_REPO = "https://github.com/iman-suherman/urp-ct-mcp-studio";
 export function Footer() {
   return (
     <footer className="border-t border-slate-200/80 bg-white/70">
-      <div className="mx-auto max-w-7xl px-6 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6">
         <p className="max-w-3xl text-sm leading-6 text-slate-500">
           This site and its plugins are independent open-source projects. They are not affiliated
           with, endorsed by, or operated by commercetools as a business. Source code is available

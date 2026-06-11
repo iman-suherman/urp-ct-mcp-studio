@@ -10,7 +10,7 @@ export async function VersionHistory() {
   const versions = await fetchAllVersions();
 
   return (
-    <section id="versions" className="mx-auto max-w-7xl px-6 py-12">
+    <section id="versions" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-brand-purple">
           All releases

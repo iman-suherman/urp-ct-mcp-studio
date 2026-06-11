@@ -31,10 +31,10 @@ const securityChecks = [
 
 export function SecureByDesign() {
   return (
-    <section id="security" className="mx-auto max-w-7xl px-6 py-12">
-      <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
-        <div className="relative lg:order-1">
-          <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-teal/20 via-brand-purple/10 to-transparent blur-2xl" />
+    <section id="security" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-10">
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-center lg:gap-8">
+        <div className="relative overflow-hidden lg:order-1">
+          <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-brand-teal/20 via-brand-purple/10 to-transparent blur-2xl md:-inset-6" />
           <div className="card relative overflow-hidden p-3 shadow-card">
             <Image
               src="/secure-by-design.png"
@@ -50,7 +50,7 @@ export function SecureByDesign() {
           <p className="text-sm font-semibold uppercase tracking-wide text-brand-teal">
             Secure by Design
           </p>
-          <h2 className="mt-3 text-3xl font-bold text-slate-900 md:text-4xl">
+          <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:mt-3 sm:text-3xl md:text-4xl">
             Credentials stay in VS Code Secret Storage while MCP servers run locally over stdio.
           </h2>
 

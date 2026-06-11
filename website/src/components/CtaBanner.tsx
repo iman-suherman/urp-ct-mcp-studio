@@ -12,11 +12,11 @@ export async function CtaBanner() {
     : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
 
   return (
-    <section className="mx-auto max-w-7xl px-6 pb-12">
-      <div className="rounded-[2rem] bg-gradient-to-r from-brand-purple to-brand-violet px-8 py-8 text-white shadow-card md:px-10">
+    <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 sm:pb-8">
+      <div className="rounded-2xl bg-gradient-to-r from-brand-purple to-brand-violet px-5 py-6 text-white shadow-card sm:rounded-[2rem] sm:px-8 sm:py-8 md:px-10">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-2xl font-bold md:text-3xl">
+            <h2 className="text-xl font-bold sm:text-2xl md:text-3xl">
               Ready to supercharge your Commerce MCP experience?
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-indigo-100 md:text-base">
