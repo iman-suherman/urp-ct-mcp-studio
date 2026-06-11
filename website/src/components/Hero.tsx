@@ -1,9 +1,9 @@
-import Image from "next/image";
 import Link from "next/link";
 import { LocalReleaseDate } from "@/components/LocalReleaseDate";
-import { BRAND_NAME } from "@/lib/brand";
 import {
   fetchLatestVersion,
+  flattenReleaseNotes,
+  formatBytes,
   publishedAtToIso,
   DOWNLOAD_BASE_URL,
   toPublicDownloadUrl,
@@ -16,6 +16,7 @@ export async function Hero() {
     : `${DOWNLOAD_BASE_URL.replace(/\/$/, "")}/latest.vsix`;
   const versionLabel = latest?.version ?? "0.1.0";
   const releasedAtIso = publishedAtToIso(latest?.publishedAt);
+  const highlights = flattenReleaseNotes(latest?.releaseNotes).slice(0, 3);
 
   return (
     <section id="home" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:py-14 lg:py-20">
@@ -66,19 +67,34 @@ export async function Hero() {
           </div>
         </div>
 
-        <div id="extend" className="relative overflow-hidden">
-          <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-brand-purple/20 via-brand-teal/10 to-transparent blur-2xl md:-inset-6" />
-          <div className="card relative overflow-hidden p-3 shadow-card">
-            <Image
-              src="/extend-with-ease.png"
-              alt={`${BRAND_NAME} — install VSIX packages, connect Commerce MCP, and explore tools from VS Code`}
-              width={1024}
-              height={682}
-              className="h-auto w-full rounded-xl"
-              priority
-            />
-          </div>
-        </div>
+        {latest && (
+          <aside
+            aria-label="Latest release"
+            className="border-t border-slate-200/50 pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0 xl:pl-12"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-purple/80">
+              Latest release
+            </p>
+            <p className="mt-3 text-base font-semibold leading-snug text-slate-800 sm:text-lg">
+              {latest.summary ?? `Commerce MCP Studio ${versionLabel}`}
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              {formatBytes(latest.sizeBytes)} · VSIX for VS Code 1.90+
+            </p>
+            {highlights.length > 0 && (
+              <ul className="mt-5 space-y-2.5 text-sm leading-relaxed text-slate-600">
+                {highlights.map((note) => (
+                  <li key={note} className="flex gap-2">
+                    <span aria-hidden className="shrink-0 text-slate-400">
+                      •
+                    </span>
+                    <span>{note}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+        )}
       </div>
     </section>
   );
