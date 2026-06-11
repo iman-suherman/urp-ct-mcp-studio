@@ -4,6 +4,7 @@ import { resolveStudioConfig } from "./config";
 import { LogStore } from "./logStore";
 import { McpProcessManager } from "./mcpProcessManager";
 import { syncNativeMcpConfig } from "./nativeMcpBridge";
+import { initProjectMcpContext, ProjectMcpInitResult } from "./projectMcpInit";
 import {
   GLOBAL_CACHED_TOOLS_KEY,
   GLOBAL_CONNECTION_STATUS_KEY,
@@ -245,6 +246,26 @@ export class CommerceMcpManager {
       this.notifyChanged();
       throw err;
     }
+  }
+
+  async initProjectMcpContext(extensionPath: string): Promise<ProjectMcpInitResult> {
+    const connection = await this.getActiveConnection();
+    if (!connection) {
+      throw new Error("Select a saved connection first.");
+    }
+
+    const clientSecret = await this.store.getClientSecret(connection.id);
+    if (!clientSecret) {
+      throw new Error("Client secret is missing for the active connection.");
+    }
+
+    const result = await initProjectMcpContext(extensionPath, connection, clientSecret);
+    this.logs.success(
+      `Initialized project MCP context for "${connection.name}" in ${result.workspaceFolder}.`,
+      "project-init"
+    );
+    this.notifyChanged();
+    return result;
   }
 
   private openExplorerIfEnabled(): void {

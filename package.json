@@ -2,7 +2,7 @@
   "name": "ct-mcp-studio",
   "displayName": "Commerce MCP Studio",
   "description": "Configure, explore, test, and use Commerce MCP servers with commercetools projects.",
-  "version": "0.1.10",
+  "version": "0.1.12",
   "publisher": "Suherman",
   "icon": "media/ct-mcp-vscode-extension-icon.png",
   "license": "MIT",
@@ -129,7 +129,10 @@
         },
         "ctMcp.updateChannel": {
           "type": "string",
-          "enum": ["stable", "insiders"],
+          "enum": [
+            "stable",
+            "insiders"
+          ],
           "default": "stable",
           "description": "Release channel used when checking for extension updates."
         },
