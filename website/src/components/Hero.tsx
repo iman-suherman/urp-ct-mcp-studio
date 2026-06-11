@@ -35,22 +35,22 @@ export async function Hero() {
           </p>
 
           <div id="download" className="mt-6 flex flex-col gap-3 sm:mt-8">
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-2 lg:gap-3">
               <a
                 href={downloadUrl}
-                className="btn-primary w-full px-5 py-3 text-sm sm:w-auto sm:px-7 sm:py-3.5 sm:text-base"
+                className="btn-primary w-full shrink-0 whitespace-nowrap px-5 py-3 text-sm sm:w-auto sm:px-6 sm:py-3 lg:px-5"
               >
                 Download v{versionLabel}
               </a>
               <Link
                 href="/versions"
-                className="btn-secondary w-full px-5 py-3 text-sm sm:w-auto sm:px-7 sm:py-3.5 sm:text-base"
+                className="btn-secondary w-full shrink-0 whitespace-nowrap px-5 py-3 text-sm sm:w-auto sm:px-6 sm:py-3 lg:px-5"
               >
                 View release history
               </Link>
               <Link
                 href="/install"
-                className="btn-secondary w-full px-5 py-3 text-sm sm:w-auto sm:px-7 sm:py-3.5 sm:text-base"
+                className="btn-secondary w-full shrink-0 whitespace-nowrap px-5 py-3 text-sm sm:w-auto sm:px-6 sm:py-3 lg:px-5"
               >
                 Install in VS Code
               </Link>
