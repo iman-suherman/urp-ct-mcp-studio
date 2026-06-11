@@ -6,6 +6,6 @@ export function mediaRoot(extensionUri: vscode.Uri): vscode.Uri {
 
 export function logoUri(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   return webview
-    .asWebviewUri(vscode.Uri.joinPath(mediaRoot(extensionUri), "ct-mcp-logo.png"))
+    .asWebviewUri(vscode.Uri.joinPath(mediaRoot(extensionUri), "ct-mcp-vscode-extension-icon.svg"))
     .toString();
 }
