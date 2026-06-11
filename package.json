@@ -36,6 +36,7 @@
     "generate-env": "node scripts/generate-env.cjs",
     "upload": "node scripts/upload-extension.cjs",
     "release": "node scripts/release.cjs",
+    "deploy:extension": "node scripts/release.cjs",
     "install-hooks": "node scripts/install-git-hooks.cjs",
     "release-notes": "node scripts/generate-release-notes.cjs",
     "deploy:registry": "node scripts/deploy-registry-api.cjs",

@@ -80,6 +80,24 @@ npm run release
 
 `npm run release` compares `HEAD` with `lastReleasedCommit` in Firestore. If nothing changed, it skips build/upload. Otherwise it auto-bumps semver (`patch` / `minor` / `major` from conventional commits), updates `package.json`, generates release notes since the last release commit, then uploads and registers.
 
+## Tracked releases (`npm run ci`)
+
+When git hooks are installed (`npm run install-hooks`), commits that touch plugin paths (`plugins.manifest.json` watch list) schedule a background **ct-mcp-extension** deploy via the same pipeline as the marketing website.
+
+From **urp-ct-mcp-studio** or **suherman-net-infra** (which delegates to the studio repo):
+
+```bash
+npm run ci                              # live dashboard
+npm run ci -- --once                    # snapshot
+npm run deploy:retry -- --repo ct-mcp-extension   # retry failed/pending release
+npm run deploy:stop -- --repo ct-mcp-extension    # cancel in-progress release
+```
+
+Release logs: `logs/ct-mcp-extension/<deployment-id>.log`  
+State file: `logs/deployments.json`
+
+Manual untracked release (still works): `npm run release` or `npm run deploy:extension`.
+
 ## Upload configuration
 
 Settings in `.env` (see `.env.example`):

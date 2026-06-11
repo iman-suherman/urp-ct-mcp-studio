@@ -24,7 +24,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--repo" && argv[i + 1]) repo = argv[++i];
     else if (argv[i] === "-h" || argv[i] === "--help") {
-      console.log("Usage: node scripts/deploy-trigger.cjs --repo ct-mcp-website");
+      console.log("Usage: node scripts/deploy-trigger.cjs --repo <ct-mcp-website|ct-mcp-extension>");
       process.exit(0);
     }
   }

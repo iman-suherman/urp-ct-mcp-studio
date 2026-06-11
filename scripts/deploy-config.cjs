@@ -29,18 +29,12 @@ const DEPLOY_TARGETS = [
   {
     repo: "ct-mcp-extension",
     label: "Commerce MCP Studio VSIX",
-    note: "manual",
+    branch: DEFAULT_BRANCH,
+    npmScript: "deploy:extension",
     details: [
-      "Updated the extension to use media/ct-mcp-vscode-extension-icon.svg:",
-      "  Activity bar → ct-mcp-vscode-extension-icon.svg",
-      "  Sidebar view → ct-mcp-vscode-extension-icon.svg",
-      "  Webview panel hero → ct-mcp-vscode-extension-icon.svg",
-      "  Extensions listing → ct-mcp-vscode-extension-icon.png (256×256, generated from the SVG)",
-      "vsce requires a PNG for the marketplace icon field — PNG generated from SVG for that spot only",
-      "Everything else uses the SVG directly (scales cleanly in the activity bar)",
-      "New files: media/ct-mcp-vscode-extension-icon.svg and media/ct-mcp-vscode-extension-icon.png",
-      "Reload the extension (or reinstall the VSIX) to see the new icon",
-      "Release: npm run release",
+      "Auto on commit when plugin paths change (plugins.manifest.json)",
+      "Manual: npm run deploy:retry -- --repo ct-mcp-extension",
+      "Track: npm run ci (from urp-ct-mcp-studio or suherman-net-infra)",
     ],
   },
 ];
