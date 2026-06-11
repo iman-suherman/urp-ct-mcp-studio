@@ -4,7 +4,8 @@
 repo_root=$(git rev-parse --show-toplevel)
 
 author_email=$(git log -1 --format="%ae")
-if [ "$author_email" != "iman.suherman@gmail.com" ]; then
+committer_email=$(git log -1 --format="%ce")
+if [ "$author_email" != "iman.suherman@gmail.com" ] || [ "$committer_email" != "iman.suherman@gmail.com" ]; then
   export GIT_COMMITTER_NAME="Iman Suherman"
   export GIT_COMMITTER_EMAIL="iman.suherman@gmail.com"
   git commit --amend --author="Iman Suherman <iman.suherman@gmail.com>" --no-edit --no-verify
