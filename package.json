@@ -2,7 +2,7 @@
   "name": "ct-mcp-studio",
   "displayName": "Commerce MCP Studio",
   "description": "Configure, explore, test, and use Commerce MCP servers with commercetools projects.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "Suherman",
   "icon": "media/ct-mcp-vscode-extension-icon.png",
   "license": "MIT",
@@ -87,6 +87,11 @@
           "type": "boolean",
           "default": true,
           "description": "Reconnect to the last active Commerce MCP connection on startup."
+        },
+        "ctMcp.openExplorerOnConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the MCP Explorer panel after a successful connection."
         },
         "ctMcp.syncNativeMcpConfig": {
           "type": "boolean",

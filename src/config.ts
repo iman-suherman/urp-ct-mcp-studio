@@ -10,6 +10,7 @@ export interface BundledConfig {
 
 export interface ResolvedStudioConfig {
   autoConnectOnStartup: boolean;
+  openExplorerOnConnect: boolean;
   syncNativeMcpConfig: boolean;
   dynamicToolLoadingThreshold: number;
   commerceMcpPackage: string;
@@ -34,6 +35,7 @@ export function resolveStudioConfig(): ResolvedStudioConfig {
 
   return {
     autoConnectOnStartup: config.get<boolean>("autoConnectOnStartup", true),
+    openExplorerOnConnect: config.get<boolean>("openExplorerOnConnect", true),
     syncNativeMcpConfig: config.get<boolean>("syncNativeMcpConfig", true),
     dynamicToolLoadingThreshold: config.get<number>("dynamicToolLoadingThreshold", 450),
     commerceMcpPackage: config.get<string>("commerceMcpPackage", "@commercetools/commerce-mcp@latest"),

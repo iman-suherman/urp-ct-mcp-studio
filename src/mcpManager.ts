@@ -83,7 +83,10 @@ export class CommerceMcpManager {
     this.notifyChanged();
   }
 
-  async connect(connectionId?: string): Promise<ConnectionTestResult> {
+  async connect(
+    connectionId?: string,
+    options: { openExplorer?: boolean } = {}
+  ): Promise<ConnectionTestResult> {
     const config = resolveStudioConfig();
     const targetId = connectionId ?? (await this.store.getActiveConnectionId());
     if (!targetId) {
@@ -120,10 +123,13 @@ export class CommerceMcpManager {
           await this.context.globalState.update(GLOBAL_CONNECTION_STATUS_KEY, message);
 
           if (config.syncNativeMcpConfig) {
-            await syncNativeMcpConfig(connection, clientSecret);
+            await syncNativeMcpConfig(connection, clientSecret, this.context.extensionPath);
           }
 
           this.logs.success(`Connected to ${connection.name}. ${tools.length} tools loaded.`);
+          if (options.openExplorer ?? true) {
+            this.openExplorerIfEnabled();
+          }
           this.notifyChanged();
 
           return {
@@ -144,7 +150,7 @@ export class CommerceMcpManager {
             `Connection failed: ${text}`
           );
           this.logs.error(`Connection failed: ${text}`);
-          await syncNativeMcpConfig(undefined, undefined);
+          await syncNativeMcpConfig(undefined, undefined, this.context.extensionPath);
           this.notifyChanged();
           throw err;
         }
@@ -154,7 +160,7 @@ export class CommerceMcpManager {
 
   async disconnect(): Promise<void> {
     await this.processManager.disconnect();
-    await syncNativeMcpConfig(undefined, undefined);
+    await syncNativeMcpConfig(undefined, undefined, this.context.extensionPath);
     await this.context.globalState.update(GLOBAL_CONNECTION_STATUS_KEY, "Disconnected");
     this.logs.info("Disconnected from Commerce MCP.");
     this.notifyChanged();
@@ -226,6 +232,14 @@ export class CommerceMcpManager {
     }
   }
 
+  private openExplorerIfEnabled(): void {
+    const config = resolveStudioConfig();
+    if (!config.openExplorerOnConnect) {
+      return;
+    }
+    void vscode.commands.executeCommand("ctMcp.openExplorer");
+  }
+
   private async buildHealth(
     connection: MCPConnection | undefined,
     toolCount: number,
@@ -271,7 +285,7 @@ export async function maybeAutoConnect(context: vscode.ExtensionContext): Promis
   }
 
   try {
-    const result = await manager.connect(active.id);
+    const result = await manager.connect(active.id, { openExplorer: false });
     if (result.ok && result.tools && result.tools.length > 0) {
       void vscode.window.setStatusBarMessage(
         `Commerce MCP: ${result.tools.length} tool(s) ready`,

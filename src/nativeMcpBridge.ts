@@ -22,7 +22,8 @@ function resolveUserMcpJsonPath(): string | undefined {
 
 export async function syncNativeMcpConfig(
   connection: MCPConnection | undefined,
-  clientSecret: string | undefined
+  clientSecret: string | undefined,
+  extensionPath?: string
 ): Promise<void> {
   const config = resolveStudioConfig();
   if (!config.syncNativeMcpConfig) {
@@ -54,7 +55,7 @@ export async function syncNativeMcpConfig(
     return;
   }
 
-  existingServers[serverId] = buildNativeMcpServerConfig(connection, clientSecret);
+  existingServers[serverId] = buildNativeMcpServerConfig(connection, clientSecret, extensionPath);
   await mcpConfig.update("servers", existingServers, vscode.ConfigurationTarget.Global);
 
   const filePath = resolveUserMcpJsonPath();
@@ -70,7 +71,7 @@ export async function syncNativeMcpConfig(
 
     payload.servers = {
       ...((payload.servers as Record<string, unknown> | undefined) ?? {}),
-      [serverId]: buildNativeMcpServerConfig(connection, clientSecret),
+      [serverId]: buildNativeMcpServerConfig(connection, clientSecret, extensionPath),
     };
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });

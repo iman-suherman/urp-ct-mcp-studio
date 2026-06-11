@@ -12,8 +12,8 @@ export const metadata: Metadata = {
   description:
     "Discover, download, and manage Commerce MCP Studio extensions for commercetools.",
   icons: {
-    icon: "/ct-mcp-logo.png",
-    apple: "/ct-mcp-logo.png",
+    icon: "/ct-mcp-vscode-extension-icon.svg",
+    apple: "/ct-mcp-vscode-extension-icon.svg",
   },
 };
 

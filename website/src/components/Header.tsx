@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { BRAND_NAME } from "@/lib/brand";
@@ -30,13 +29,12 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
         <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <Image
-            src="/ct-mcp-logo.png"
+          <img
+            src="/ct-mcp-vscode-extension-icon.svg"
             alt={BRAND_NAME}
-            width={96}
-            height={64}
-            priority
-            className="h-10 w-auto shrink-0 sm:h-14"
+            width={56}
+            height={56}
+            className="h-10 w-10 shrink-0 sm:h-14 sm:w-14"
           />
           <span className="hidden truncate text-sm font-bold leading-snug tracking-tight text-slate-900 min-[420px]:block sm:max-w-xs sm:text-base lg:max-w-md lg:text-lg">
             {BRAND_NAME}

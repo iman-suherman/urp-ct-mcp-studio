@@ -1,0 +1,48 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">CT MCP Studio VS Code Extension Icon</title>
+  <desc id="desc">Original abstract network hub logo for CT MCP Studio with transparent background.</desc>
+  <defs>
+    <linearGradient id="strokeGradient" x1="196" y1="252" x2="828" y2="772" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17D4FF"/>
+      <stop offset="0.42" stop-color="#6657FF"/>
+      <stop offset="0.72" stop-color="#8A4DFF"/>
+      <stop offset="1" stop-color="#FFB000"/>
+    </linearGradient>
+    <linearGradient id="nodeGradient" x1="256" y1="168" x2="820" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1ED6FF"/>
+      <stop offset="0.5" stop-color="#6C5CFF"/>
+      <stop offset="1" stop-color="#FFB000"/>
+    </linearGradient>
+    <linearGradient id="coreGradient" x1="390" y1="342" x2="634" y2="666" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#182A56"/>
+      <stop offset="1" stop-color="#07152E"/>
+    </linearGradient>
+    <filter id="softShadow" x="120" y="120" width="784" height="784" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#111B3D" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <!-- outer connection frame -->
+    <path d="M512 166L740 298V562L512 694L284 562V298L512 166Z" stroke="url(#strokeGradient)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- inner routing lines -->
+    <path d="M512 166V424" stroke="url(#strokeGradient)" stroke-width="42" stroke-linecap="round"/>
+    <path d="M284 298L512 424L740 298" stroke="url(#strokeGradient)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M284 562L512 424L740 562" stroke="url(#strokeGradient)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M512 424V694" stroke="url(#strokeGradient)" stroke-width="42" stroke-linecap="round"/>
+
+    <!-- connection nodes -->
+    <circle cx="512" cy="166" r="54" fill="url(#nodeGradient)"/>
+    <circle cx="740" cy="298" r="54" fill="url(#nodeGradient)"/>
+    <circle cx="740" cy="562" r="54" fill="url(#nodeGradient)"/>
+    <circle cx="512" cy="694" r="54" fill="url(#nodeGradient)"/>
+    <circle cx="284" cy="562" r="54" fill="url(#nodeGradient)"/>
+    <circle cx="284" cy="298" r="54" fill="url(#nodeGradient)"/>
+
+    <!-- central MCP hub -->
+    <circle cx="512" cy="424" r="92" fill="url(#coreGradient)"/>
+    <circle cx="512" cy="424" r="63" fill="#0B1B3B" opacity="0.92"/>
+    <circle cx="512" cy="424" r="24" fill="#FFFFFF" opacity="0.96"/>
+  </g>
+</svg>

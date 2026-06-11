@@ -63,6 +63,7 @@ export function buildMcpSpawnEnv(): Record<string, string> {
   const env: Record<string, string> = {};
 
   for (const [key, value] of Object.entries({
+    ELECTRON_RUN_AS_NODE: "1",
     HOME: process.env.HOME,
     LOGNAME: process.env.LOGNAME,
     [pathKey]: `${nodeBin}${path.delimiter}${existingPath}`,
@@ -120,9 +121,10 @@ export function resolveCommerceMcpSpawn(
 
 export function buildNativeMcpServerConfig(
   connection: MCPConnection,
-  clientSecret: string
+  clientSecret: string,
+  extensionPath?: string
 ): Record<string, unknown> {
-  const spawn = resolveCommerceMcpSpawn(connection, clientSecret);
+  const spawn = resolveCommerceMcpSpawn(connection, clientSecret, extensionPath);
   return {
     type: "stdio",
     command: spawn.command,
