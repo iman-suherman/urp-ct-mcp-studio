@@ -3,6 +3,7 @@ import { resolveStudioConfig } from "./config";
 import { formatLogTimestamp } from "./logStore";
 import { buildAiPrompt, buildChatPrompt } from "./mcpBootstrap";
 import { CommerceMcpManager } from "./mcpManager";
+import { openProjectMcpFiles } from "./projectMcpInit";
 import { groupToolsByCategory } from "./toolCatalog";
 import { PROMPT_TEMPLATES } from "./templates";
 import { ConnectionHealth, LogEntry, MCPConnection } from "./types";
@@ -12,6 +13,7 @@ export interface StudioPanelState {
   connections: Array<
     MCPConnection & {
       isActive: boolean;
+      isConnected: boolean;
       hasSecret: boolean;
     }
   >;
@@ -43,6 +45,7 @@ export type StudioWebviewMessage =
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
   | { type: "openNavigator" }
+  | { type: "initProjectMcp" }
   | { type: "copyChatPrompt"; text: string }
   | { type: "copyAiPrompt"; toolName: string; description?: string }
   | { type: "clearLogs" };
@@ -86,6 +89,7 @@ export class StudioUiController {
       connections.map(async (connection) => ({
         ...connection,
         isActive: active?.id === connection.id,
+        isConnected: connected && active?.id === connection.id,
         hasSecret: await this.manager["store"].hasClientSecret(connection.id),
       }))
     );
@@ -238,6 +242,26 @@ export class StudioUiController {
         await vscode.commands.executeCommand("ctMcp.openNavigator");
         break;
 
+      case "initProjectMcp":
+        await this.pushState(undefined, true);
+        try {
+          const result = await this.manager.initProjectMcpContext(this.context.extensionPath);
+          const action = await vscode.window.showInformationMessage(
+            `Project MCP initialized for ${result.connectionName} · ${result.projectKey}.`,
+            "Open .env.mcp"
+          );
+          if (action === "Open .env.mcp") {
+            await openProjectMcpFiles(result);
+          }
+          await this.pushState(
+            `Created ${result.files.length} file(s): ${result.files.join(", ")}`
+          );
+        } catch (err) {
+          const text = err instanceof Error ? err.message : String(err);
+          await this.pushState(text);
+        }
+        break;
+
       case "copyChatPrompt":
         await vscode.env.clipboard.writeText(buildChatPrompt(message.text));
         void vscode.window.showInformationMessage("Chat prompt copied to clipboard.");
@@ -341,7 +365,32 @@ export function renderStudioHtml(options: {
       cursor: pointer;
     }
     .conn-item.active { border-color: rgba(37,99,235,.55); background: rgba(37,99,235,.08); }
+    .conn-item.connected {
+      border-color: rgba(34,197,94,.55);
+      background: rgba(34,197,94,.08);
+    }
+    .conn-item.connected.active {
+      border-color: rgba(34,197,94,.65);
+      background: linear-gradient(135deg, rgba(34,197,94,.1), rgba(37,99,235,.06));
+    }
     .conn-name { font-weight: 600; }
+    .conn-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #22c55e;
+      background: rgba(34,197,94,.15);
+    }
+    button.disconnect-btn {
+      background: rgba(239,68,68,.15);
+      color: #ef4444;
+      border-color: rgba(239,68,68,.35);
+    }
     .conn-meta { font-size: 10px; color: var(--vscode-descriptionForeground); }
     .tool-group { margin-bottom: 10px; }
     .tool-group-title {
@@ -402,6 +451,10 @@ export function renderStudioHtml(options: {
         <button id="btn-navigator">Navigate</button>
         <button id="btn-explorer" class="secondary">Explorer</button>
       </div>
+      <div class="row" style="margin-top:6px;">
+        <button id="btn-init-project" class="secondary">Init Project MCP</button>
+      </div>
+      <p class="subtitle" style="margin-top:6px;">Writes <code>.cursor/mcp.json</code>, <code>.env.mcp</code>, and a Cursor rule using the active connection.</p>
       <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
       <div id="connect-diagnostics" class="diag-list"></div>
     </div>
@@ -485,6 +538,9 @@ export function renderStudioHtml(options: {
     document.getElementById('btn-explorer').addEventListener('click', () => {
       vscode.postMessage({ type: 'openExplorer' });
     });
+    document.getElementById('btn-init-project').addEventListener('click', () => {
+      vscode.postMessage({ type: 'initProjectMcp' });
+    });
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
       vscode.postMessage({ type: 'clearLogs' });
     });
@@ -512,15 +568,35 @@ export function renderStudioHtml(options: {
       });
     });
 
-    function renderHealth(health) {
+    function formatConnectionStatus(next) {
+      if (!next.connected) {
+        return next.connectionStatus || 'Not connected';
+      }
+      const name = next.activeConnection?.name;
+      const tools = next.health?.toolsLoaded;
+      if (name && tools != null) {
+        return 'Connected · ' + name + ' · ' + tools + ' tool(s) loaded';
+      }
+      if (name) {
+        return 'Connected · ' + name;
+      }
+      return next.connectionStatus || 'Connected';
+    }
+
+    function renderHealth(health, activeConnection) {
       const el = document.getElementById('health');
       if (!health) { el.textContent = ''; return; }
-      const lines = [
+      const lines = [];
+      if (activeConnection?.name) {
+        lines.push('Using connection: ' + activeConnection.name +
+          (activeConnection.projectKey ? ' · ' + activeConnection.projectKey : ''));
+      }
+      lines.push(
         health.mcpRunning ? '✓ MCP Running' : '✗ MCP Not Running',
         health.authValid ? '✓ Authentication Valid' : '✗ Authentication Invalid',
         health.apiReachable ? '✓ API Reachable' : '✗ API Unreachable',
         '✓ Tools Loaded (' + (health.toolsLoaded || 0) + ')'
-      ];
+      );
       el.textContent = lines.join('\\n');
     }
 
@@ -530,18 +606,28 @@ export function renderStudioHtml(options: {
         list.innerHTML = '<p class="subtitle">No connections yet.</p>';
         return;
       }
-      list.innerHTML = connections.map(conn => \`
-        <div class="conn-item \${conn.isActive ? 'active' : ''}" data-id="\${conn.id}">
-          <div class="conn-name">\${conn.name}</div>
+      list.innerHTML = connections.map(conn => {
+        const itemClass = [
+          'conn-item',
+          conn.isActive ? 'active' : '',
+          conn.isConnected ? 'connected' : ''
+        ].filter(Boolean).join(' ');
+        const toggleAction = conn.isConnected ? 'disconnect' : 'connect';
+        const toggleLabel = conn.isConnected ? 'Disconnect' : 'Connect';
+        const toggleClass = conn.isConnected ? 'disconnect-btn' : '';
+        return \`
+        <div class="\${itemClass}" data-id="\${conn.id}">
+          <div class="conn-name">\${conn.name}\${conn.isConnected ? '<span class="conn-badge">Live</span>' : ''}</div>
           <div class="conn-meta">\${conn.projectKey} · \${conn.hasSecret ? 'secret saved' : 'missing secret'}</div>
           <div class="row">
             <button data-action="select" data-id="\${conn.id}">Select</button>
-            <button data-action="connect" data-id="\${conn.id}">Connect</button>
+            <button class="\${toggleClass}" data-action="\${toggleAction}" data-id="\${conn.id}">\${toggleLabel}</button>
             <button data-action="edit" data-id="\${conn.id}">Edit</button>
             <button data-action="delete" data-id="\${conn.id}">Delete</button>
           </div>
         </div>
-      \`).join('');
+      \`;
+      }).join('');
 
       list.querySelectorAll('button').forEach(btn => {
         btn.addEventListener('click', (event) => {
@@ -551,6 +637,7 @@ export function renderStudioHtml(options: {
           const conn = connections.find(item => item.id === id);
           if (action === 'select') vscode.postMessage({ type: 'selectConnection', connectionId: id });
           if (action === 'connect') vscode.postMessage({ type: 'connect', connectionId: id });
+          if (action === 'disconnect') vscode.postMessage({ type: 'disconnect' });
           if (action === 'delete') vscode.postMessage({ type: 'deleteConnection', connectionId: id });
           if (action === 'edit' && conn) {
             document.getElementById('connection-id').value = conn.id;
@@ -649,9 +736,9 @@ export function renderStudioHtml(options: {
 
     function applyState(next) {
       state = next;
-      document.getElementById('connection-status').textContent = next.connectionStatus || (next.connected ? 'Connected' : 'Not connected');
+      document.getElementById('connection-status').textContent = formatConnectionStatus(next);
       document.getElementById('connection-status').className = 'status ' + (next.connected ? 'ok' : 'bad');
-      renderHealth(next.health);
+      renderHealth(next.health, next.activeConnection);
       renderConnections(next.connections || []);
       renderTools(next.toolGroups || []);
       renderLogs(next.logs || []);

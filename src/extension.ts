@@ -2,19 +2,29 @@ import * as vscode from "vscode";
 import { ExplorerPanel } from "./explorerPanel";
 import { NavigatorPanel } from "./navigatorPanel";
 import { getCommerceMcpManager, maybeAutoConnect, deactivateCommerceMcpManager } from "./mcpManager";
+import { openProjectMcpFiles } from "./projectMcpInit";
 import { StudioViewProvider } from "./studioViewProvider";
+import { disposeUpdateService, getUpdateService } from "./updateService";
+import { ReleaseNotesPanel, VersionHistoryProvider } from "./versionHistory";
 
 export function activate(context: vscode.ExtensionContext): void {
   const manager = getCommerceMcpManager(context);
   const studioView = new StudioViewProvider(context, manager);
+  const updateService = getUpdateService(context);
+  const versionHistory = new VersionHistoryProvider(context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       StudioViewProvider.viewId,
       studioView,
       { webviewOptions: { retainContextWhenHidden: true } }
-    )
+    ),
+    vscode.window.registerTreeDataProvider("ctMcp.versionHistory", versionHistory),
+    versionHistory,
+    updateService
   );
+
+  updateService.start();
 
   context.subscriptions.push(
     vscode.commands.registerCommand("ctMcp.openStudio", async () => {
@@ -25,6 +35,22 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("ctMcp.openNavigator", () => {
       NavigatorPanel.show(context, manager);
+    }),
+    vscode.commands.registerCommand("ctMcp.initProjectMcp", async () => {
+      try {
+        const result = await manager.initProjectMcpContext(context.extensionPath);
+        const action = await vscode.window.showInformationMessage(
+          `Project MCP initialized for ${result.connectionName} · ${result.projectKey}.`,
+          "Open .env.mcp"
+        );
+        if (action === "Open .env.mcp") {
+          await openProjectMcpFiles(result);
+        }
+        await studioView.refresh();
+      } catch (err) {
+        const text = err instanceof Error ? err.message : String(err);
+        void vscode.window.showErrorMessage(text);
+      }
     }),
     vscode.commands.registerCommand("ctMcp.connect", async () => {
       try {
@@ -47,6 +73,34 @@ export function activate(context: vscode.ExtensionContext): void {
         const text = err instanceof Error ? err.message : String(err);
         void vscode.window.showErrorMessage(text);
       }
+    }),
+    vscode.commands.registerCommand("ctMcp.checkForUpdates", async () => {
+      const release = await updateService.checkForUpdates({ notify: true });
+      if (!release) {
+        void vscode.window.showWarningMessage("Could not check for updates.");
+        return;
+      }
+      if (!updateService.hasUpdateAvailable()) {
+        void vscode.window.showInformationMessage(
+          `Commerce MCP Studio ${context.extension.packageJSON.version} is up to date.`
+        );
+      }
+    }),
+    vscode.commands.registerCommand("ctMcp.downloadUpdate", async () => {
+      await updateService.downloadAndInstallUpdate();
+    }),
+    vscode.commands.registerCommand("ctMcp.openReleaseNotes", async (version?: string) => {
+      const targetVersion =
+        version ??
+        updateService.getLatestRelease()?.version ??
+        context.extension.packageJSON.version;
+      await ReleaseNotesPanel.show(context, String(targetVersion));
+    }),
+    vscode.commands.registerCommand("ctMcp.refreshVersionHistory", async () => {
+      await versionHistory.refresh();
+    }),
+    vscode.commands.registerCommand("ctMcp.openVersionHistory", async () => {
+      await vscode.commands.executeCommand("ctMcp.versionHistory.focus");
     })
   );
 
@@ -54,5 +108,6 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
+  disposeUpdateService();
   await deactivateCommerceMcpManager();
 }

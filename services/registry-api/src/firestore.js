@@ -1,4 +1,5 @@
 const { Firestore } = require("@google-cloud/firestore");
+const { normalizeChannel, pickLatestForChannel } = require("./channels");
 
 const projectId = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 const collectionName =
@@ -78,20 +79,22 @@ async function getPluginVersion(pluginId, version) {
   }
 }
 
-async function getLatestPluginVersion(pluginId) {
+async function getLatestPluginVersion(pluginId, options = {}) {
+  const channel = normalizeChannel(options.channel);
   try {
     const snapshot = await firestore
       .collection(collectionName)
       .where("pluginId", "==", pluginId)
       .orderBy("versionSortKey", "desc")
-      .limit(1)
+      .limit(channel === "stable" ? 20 : 1)
       .get();
     if (snapshot.empty) return null;
-    return stripInternalFields(snapshot.docs[0].data());
+    const versions = snapshot.docs.map((doc) => stripInternalFields(doc.data()));
+    return pickLatestForChannel(versions, channel);
   } catch (err) {
     if (/index/i.test(String(err.message))) {
       const versions = await listAllVersions(pluginId);
-      return versions[0] || null;
+      return pickLatestForChannel(versions, channel);
     }
     if (isFirestoreNotReady(err)) return null;
     throw err;

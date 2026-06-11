@@ -5,7 +5,12 @@ const {
   getPluginVersion,
   getLatestPluginVersion,
 } = require("./firestore");
+const { normalizeChannel } = require("./channels");
 const { withPublicDownloadUrls } = require("./download-urls");
+const { formatLatestRelease } = require("./release-format");
+
+const DEFAULT_PLUGIN_ID =
+  process.env.DEFAULT_PLUGIN_ID?.trim() || "ct-mcp-studio";
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -50,12 +55,28 @@ app.get("/api/v1/plugins/:pluginId/versions", async (req, res, next) => {
 
 app.get("/api/v1/plugins/:pluginId/versions/latest", async (req, res, next) => {
   try {
-    const version = await getLatestPluginVersion(req.params.pluginId);
+    const channel = normalizeChannel(req.query.channel);
+    const version = await getLatestPluginVersion(req.params.pluginId, { channel });
     if (!version) {
       res.status(404).json({ error: "No versions found for plugin" });
       return;
     }
-    res.json(withPublicDownloadUrls(version));
+    res.json(withPublicDownloadUrls({ ...version, channel: version.channel || channel }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/releases/latest", async (req, res, next) => {
+  try {
+    const pluginId = String(req.query.pluginId || DEFAULT_PLUGIN_ID).trim();
+    const channel = normalizeChannel(req.query.channel);
+    const version = await getLatestPluginVersion(pluginId, { channel });
+    if (!version) {
+      res.status(404).json({ error: "No releases found" });
+      return;
+    }
+    res.json(formatLatestRelease({ ...version, channel: version.channel || channel }));
   } catch (err) {
     next(err);
   }

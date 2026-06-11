@@ -69,6 +69,7 @@ async function registerPluginVersion({
     version: release.version,
     semver: release.semver,
     versionSortKey: sortKey,
+    channel: release.channel || process.env.RELEASE_CHANNEL?.trim() || "stable",
     summary: release.summary,
     releaseNotes: release.releaseNotes,
     releaseNotesMarkdown: release.releaseNotesMarkdown,

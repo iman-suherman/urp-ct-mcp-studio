@@ -6,6 +6,10 @@ export interface BundledConfig {
   defaultAuthUrl: string;
   defaultApiUrl: string;
   nativeMcpServerId: string;
+  pluginId: string;
+  registryApiUrl: string;
+  websiteUrl: string;
+  downloadDir: string;
 }
 
 export interface ResolvedStudioConfig {
@@ -17,6 +21,15 @@ export interface ResolvedStudioConfig {
   defaultAuthUrl: string;
   defaultApiUrl: string;
   nativeMcpServerId: string;
+}
+
+export interface ResolvedUpdateConfig {
+  pluginId: string;
+  registryApiUrl: string;
+  websiteUrl: string;
+  downloadDir: string;
+  updateCheckEnabled: boolean;
+  updateChannel: "stable" | "insiders";
 }
 
 let bundledConfig: BundledConfig | undefined;
@@ -42,5 +55,20 @@ export function resolveStudioConfig(): ResolvedStudioConfig {
     defaultAuthUrl: bundled.defaultAuthUrl,
     defaultApiUrl: bundled.defaultApiUrl,
     nativeMcpServerId: bundled.nativeMcpServerId,
+  };
+}
+
+export function resolveUpdateConfig(): ResolvedUpdateConfig {
+  const bundled = getBundledConfig();
+  const config = vscode.workspace.getConfiguration("ctMcp");
+  const channel = config.get<string>("updateChannel", "stable");
+
+  return {
+    pluginId: bundled.pluginId,
+    registryApiUrl: config.get<string>("registryApiUrl", bundled.registryApiUrl),
+    websiteUrl: config.get<string>("websiteUrl", bundled.websiteUrl),
+    downloadDir: bundled.downloadDir,
+    updateCheckEnabled: config.get<boolean>("updateCheckEnabled", true),
+    updateChannel: channel === "insiders" ? "insiders" : "stable",
   };
 }

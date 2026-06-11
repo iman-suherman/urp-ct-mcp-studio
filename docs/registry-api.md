@@ -29,8 +29,28 @@ Default local URL: `http://127.0.0.1:8080`
 | `GET` | `/health` | Health check |
 | `GET` | `/api/v1/plugins` | List registered plugins |
 | `GET` | `/api/v1/plugins/{pluginId}/versions` | All versions (newest first) |
-| `GET` | `/api/v1/plugins/{pluginId}/versions/latest` | Latest version with release notes |
+| `GET` | `/api/v1/plugins/{pluginId}/versions/latest` | Latest version with release notes (`?channel=stable\|insiders`) |
 | `GET` | `/api/v1/plugins/{pluginId}/versions/{version}` | Specific semver release |
+| `GET` | `/api/releases/latest` | Extension update checker payload (`?pluginId=ct-mcp-studio&channel=stable`) |
+
+### Update checker response
+
+`GET /api/releases/latest?channel=stable`
+
+```json
+{
+  "version": "0.1.9",
+  "name": "Commerce MCP Studio",
+  "releaseDate": "2026-06-11",
+  "downloadUrl": "https://ct-mcp-download.suherman.net/downloads/ct-mcp-studio-0.1.9.vsix",
+  "releaseNotesUrl": "https://ct-mcp.suherman.net/versions?version=0.1.9",
+  "mandatory": false,
+  "channel": "stable",
+  "releaseNotes": ["Added MCP Explorer"]
+}
+```
+
+Use `channel=insiders` for prerelease builds tagged with `channel: insiders` in Firestore.
 
 Example:
 

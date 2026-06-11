@@ -1,5 +1,9 @@
 {
   "defaultAuthUrl": "https://auth.europe-west1.gcp.commercetools.com",
   "defaultApiUrl": "https://api.europe-west1.gcp.commercetools.com",
-  "nativeMcpServerId": "commerce-mcp"
+  "nativeMcpServerId": "commerce-mcp",
+  "pluginId": "ct-mcp-studio",
+  "registryApiUrl": "https://ct-mcp-registry.suherman.net",
+  "websiteUrl": "https://ct-mcp.suherman.net",
+  "downloadDir": ".ct-mcp/downloads"
 }

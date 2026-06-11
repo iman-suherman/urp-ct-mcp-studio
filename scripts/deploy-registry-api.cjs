@@ -46,6 +46,13 @@ function main() {
   const serviceName = process.env.REGISTRY_API_SERVICE?.trim() || "ct-mcp-registry-api";
   const collection = process.env.FIRESTORE_PLUGIN_COLLECTION?.trim() || "mcp_plugin_versions";
   const catalog = process.env.FIRESTORE_PLUGIN_CATALOG?.trim() || "mcp_plugin_catalog";
+  const downloadBase =
+    process.env.PUBLIC_DOWNLOAD_BASE_URL?.trim() ||
+    "https://ct-mcp-download.suherman.net/downloads";
+  const websiteBase =
+    process.env.WEBSITE_BASE_URL?.trim() || "https://ct-mcp.suherman.net";
+  const defaultPluginId =
+    process.env.DEFAULT_PLUGIN_ID?.trim() || "ct-mcp-studio";
 
   const indexesPath = path.join(root, "firestore", "indexes.json");
   if (fs.existsSync(indexesPath)) {
@@ -95,7 +102,7 @@ function main() {
     "--allow-unauthenticated",
     "--quiet",
     "--set-env-vars",
-    `GCP_PROJECT_ID=${projectId},FIRESTORE_PLUGIN_COLLECTION=${collection},FIRESTORE_PLUGIN_CATALOG=${catalog}`,
+    `GCP_PROJECT_ID=${projectId},FIRESTORE_PLUGIN_COLLECTION=${collection},FIRESTORE_PLUGIN_CATALOG=${catalog},PUBLIC_DOWNLOAD_BASE_URL=${downloadBase},WEBSITE_BASE_URL=${websiteBase},DEFAULT_PLUGIN_ID=${defaultPluginId}`,
   ]);
 
   console.log("deploy:registry: done");
