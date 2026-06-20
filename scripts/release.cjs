@@ -10,10 +10,32 @@ const { getLatestPluginRelease, markReleaseCheckpoint } = require("./registry-re
 const { bumpSemver, assertSemver } = require("./semver.cjs");
 const { suggestBumpLevel, getCommits } = require("./generate-release-notes.cjs");
 const { uploadExtension } = require("./upload-extension.cjs");
+const { getDeployTarget } = require("./deploy-config.cjs");
+const { recordDirectDeployOutcome } = require("./deploy-record-direct.cjs");
 
 const root = path.join(__dirname, "..");
 const shell = process.platform === "win32";
 const packageJsonPath = path.join(root, "package.json");
+const DEPLOY_REPO = "ct-mcp-extension";
+const DEPLOY_NPM_SCRIPT = "deploy:extension";
+const deployTarget = getDeployTarget(DEPLOY_REPO);
+const deployStartedAt = new Date().toISOString();
+let deployRecorded = false;
+
+function recordDeploy(status, { exitCode = 0, error = null, activityMessage = null } = {}) {
+  if (deployRecorded) return;
+  deployRecorded = true;
+  recordDirectDeployOutcome({
+    repo: DEPLOY_REPO,
+    label: deployTarget?.label,
+    npmScript: DEPLOY_NPM_SCRIPT,
+    status,
+    startedAt: deployStartedAt,
+    exitCode,
+    error,
+    activityMessage,
+  });
+}
 
 function run(command, args) {
   const r = spawnSync(command, args, {
@@ -23,7 +45,13 @@ function run(command, args) {
     env: process.env,
   });
   if (r.error) throw r.error;
-  if (r.status !== 0) process.exit(r.status ?? 1);
+  if (r.status !== 0) {
+    recordDeploy("failure", {
+      exitCode: r.status ?? 1,
+      error: `${command} exited ${r.status ?? 1}`,
+    });
+    process.exit(r.status ?? 1);
+  }
 }
 
 function runGit(args) {
@@ -160,9 +188,14 @@ async function main() {
 
   await markReleaseCheckpoint(pluginId, headCommit, version);
   console.log(`release: done — v${version} (${headCommit.slice(0, 7)})`);
+  recordDeploy("success", {
+    exitCode: 0,
+    activityMessage: `release: done — v${version} (${headCommit.slice(0, 7)})`,
+  });
 }
 
 main().catch((err) => {
+  recordDeploy("failure", { exitCode: 1, error: err.message || String(err) });
   console.error(err);
   process.exit(1);
 });

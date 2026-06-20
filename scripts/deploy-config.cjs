@@ -23,6 +23,7 @@ const DEPLOY_TARGETS = [
   {
     repo: "ct-mcp-download",
     label: "ct-mcp-download.suherman.net",
+    infraDeploy: true,
     note: "manual",
     details: ["Deploy from suherman-net-infra: npm run cloudflare:ct-mcp -- --skip-website --skip-registry"],
   },
