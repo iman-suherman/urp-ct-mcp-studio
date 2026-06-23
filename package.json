@@ -97,6 +97,11 @@
     "configuration": {
       "title": "Commerce MCP Studio",
       "properties": {
+        "ctMcp.sandboxMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "When enabled, blocks connections whose name or project key contains \"prod\" or \"qantas\"."
+        },
         "ctMcp.autoConnectOnStartup": {
           "type": "boolean",
           "default": true,

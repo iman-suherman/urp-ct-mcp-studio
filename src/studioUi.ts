@@ -33,12 +33,15 @@ export interface StudioPanelState {
   };
   error?: string;
   busy?: boolean;
+  connectionFormStep?: 1 | 2;
 }
 
 export type StudioWebviewMessage =
   | { type: "ready" }
   | { type: "switchTab"; tab: StudioPanelState["activeTab"] }
   | { type: "saveConnection"; connection: Record<string, unknown>; connectionId?: string }
+  | { type: "validateConnectionIdentity"; name: string; projectKey: string }
+  | { type: "backConnectionIdentity" }
   | { type: "deleteConnection"; connectionId: string }
   | { type: "selectConnection"; connectionId: string }
   | { type: "connect"; connectionId?: string }
@@ -58,6 +61,7 @@ export interface StudioUiHost {
 
 export class StudioUiController {
   private activeTab: StudioPanelState["activeTab"] = "connections";
+  private connectionFormStep: 1 | 2 = 1;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -73,7 +77,14 @@ export class StudioUiController {
     );
   }
 
-  async pushState(error?: string, busy?: boolean): Promise<void> {
+  async pushState(
+    error?: string,
+    busy?: boolean,
+    connectionFormStep?: 1 | 2
+  ): Promise<void> {
+    if (connectionFormStep !== undefined) {
+      this.connectionFormStep = connectionFormStep;
+    }
     const config = resolveStudioConfig();
     const connections = await this.manager.listConnections();
     const active = await this.manager.getActiveConnection();
@@ -160,6 +171,7 @@ export class StudioUiController {
       },
       error,
       busy,
+      connectionFormStep: this.connectionFormStep,
     });
   }
 
@@ -190,13 +202,33 @@ export class StudioUiController {
             },
             message.connectionId
           );
-          await this.pushState("Connection saved.");
+          this.connectionFormStep = 1;
+          await this.pushState("Connection saved.", false, 1);
         } catch (err) {
           const text = err instanceof Error ? err.message : String(err);
-          await this.pushState(text);
+          await this.pushState(text, false, 2);
         }
         break;
       }
+
+      case "validateConnectionIdentity":
+        await this.pushState(undefined, true);
+        try {
+          await this.manager.validateConnectionIdentity({
+            name: message.name,
+            projectKey: message.projectKey,
+          });
+          await this.pushState(undefined, false, 2);
+        } catch (err) {
+          const text = err instanceof Error ? err.message : String(err);
+          await this.pushState(text, false, 1);
+        }
+        break;
+
+      case "backConnectionIdentity":
+        this.connectionFormStep = 1;
+        await this.pushState(undefined, false, 1);
+        break;
 
       case "deleteConnection":
         await this.manager.deleteConnection(message.connectionId);
@@ -442,6 +474,15 @@ export function renderStudioHtml(options: {
     .template-desc { font-size: 11px; color: var(--vscode-descriptionForeground); }
     .error { color: #ef4444; font-size: 11px; margin: 8px 0; white-space: pre-wrap; }
     .hidden { display: none; }
+    .identity-summary {
+      font-size: 11px;
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 6px;
+      background: rgba(128,128,128,.08);
+      color: var(--vscode-descriptionForeground);
+    }
+    .identity-summary strong { color: var(--vscode-foreground); }
   </style>
 </head>
 <body>
@@ -483,16 +524,26 @@ export function renderStudioHtml(options: {
 
     <div class="card">
       <strong id="form-title">Add Connection</strong>
+      <p class="subtitle" id="form-step-label">Step 1 of 2 — Project identity</p>
       <input type="hidden" id="connection-id" />
-      <div class="field"><label>Name</label><input id="name" placeholder="Qantas SIT" /></div>
-      <div class="field"><label>Project Key</label><input id="projectKey" placeholder="my-project" /></div>
-      <div class="field"><label>Client ID</label><input id="clientId" /></div>
-      <div class="field"><label>Client Secret</label><input id="clientSecret" type="password" /></div>
-      <div class="field"><label>API URL</label><input id="apiUrl" /></div>
-      <div class="field"><label>Auth URL</label><input id="authUrl" /></div>
-      <div class="row">
-        <button id="btn-save">Save Connection</button>
-        <button id="btn-reset-form">Reset</button>
+      <div id="connection-step-identity">
+        <div class="field"><label>Name</label><input id="name" placeholder="Qantas SIT" /></div>
+        <div class="field"><label>Project Key</label><input id="projectKey" placeholder="my-project" /></div>
+        <div class="row">
+          <button id="btn-continue">Continue</button>
+          <button id="btn-reset-form" class="secondary">Reset</button>
+        </div>
+      </div>
+      <div id="connection-step-credentials" class="hidden">
+        <div class="identity-summary" id="identity-summary"></div>
+        <div class="field"><label>Client ID</label><input id="clientId" /></div>
+        <div class="field"><label>Client Secret</label><input id="clientSecret" type="password" /></div>
+        <div class="field"><label>API URL</label><input id="apiUrl" /></div>
+        <div class="field"><label>Auth URL</label><input id="authUrl" /></div>
+        <div class="row">
+          <button id="btn-save">Save Connection</button>
+          <button id="btn-back-identity" class="secondary">Back</button>
+        </div>
       </div>
     </div>
   </section>
@@ -525,6 +576,52 @@ export function renderStudioHtml(options: {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     let state = {};
+    let editingConnection = null;
+
+    function setFormStep(step) {
+      document.getElementById('connection-step-identity').classList.toggle('hidden', step !== 1);
+      document.getElementById('connection-step-credentials').classList.toggle('hidden', step !== 2);
+      document.getElementById('form-step-label').textContent =
+        step === 1 ? 'Step 1 of 2 — Project identity' : 'Step 2 of 2 — Credentials';
+    }
+
+    function updateIdentitySummary() {
+      const name = document.getElementById('name').value.trim();
+      const projectKey = document.getElementById('projectKey').value.trim();
+      document.getElementById('identity-summary').innerHTML =
+        name && projectKey
+          ? 'Connecting to <strong>' + name + '</strong> · <strong>' + projectKey + '</strong>'
+          : '';
+    }
+
+    function prepareCredentialsStep() {
+      updateIdentitySummary();
+      if (editingConnection) {
+        document.getElementById('clientId').value = editingConnection.clientId;
+        document.getElementById('authUrl').value = editingConnection.authUrl;
+        document.getElementById('apiUrl').value = editingConnection.apiUrl;
+        document.getElementById('clientSecret').value = '';
+      } else {
+        document.getElementById('clientId').value = '';
+        document.getElementById('clientSecret').value = '';
+        document.getElementById('authUrl').value = state.defaults?.authUrl || '';
+        document.getElementById('apiUrl').value = state.defaults?.apiUrl || '';
+      }
+    }
+
+    function resetConnectionForm() {
+      editingConnection = null;
+      document.getElementById('connection-id').value = '';
+      document.getElementById('form-title').textContent = 'Add Connection';
+      document.getElementById('name').value = '';
+      document.getElementById('projectKey').value = '';
+      document.getElementById('clientId').value = '';
+      document.getElementById('clientSecret').value = '';
+      document.getElementById('authUrl').value = state.defaults?.authUrl || '';
+      document.getElementById('apiUrl').value = state.defaults?.apiUrl || '';
+      document.getElementById('identity-summary').textContent = '';
+      setFormStep(1);
+    }
 
     function setTab(tab) {
       document.querySelectorAll('.tab').forEach(el => {
@@ -556,23 +653,44 @@ export function renderStudioHtml(options: {
       vscode.postMessage({ type: 'clearLogs' });
     });
     document.getElementById('btn-reset-form').addEventListener('click', () => {
-      document.getElementById('connection-id').value = '';
-      document.getElementById('form-title').textContent = 'Add Connection';
-      ['name','projectKey','clientId','clientSecret'].forEach(id => {
-        document.getElementById(id).value = '';
-      });
-      document.getElementById('authUrl').value = state.defaults?.authUrl || '';
-      document.getElementById('apiUrl').value = state.defaults?.apiUrl || '';
+      resetConnectionForm();
+    });
+    document.getElementById('btn-back-identity').addEventListener('click', () => {
+      setFormStep(1);
+      vscode.postMessage({ type: 'backConnectionIdentity' });
+    });
+    document.getElementById('btn-continue').addEventListener('click', () => {
+      const name = document.getElementById('name').value.trim();
+      const projectKey = document.getElementById('projectKey').value.trim();
+      if (!name || !projectKey) {
+        document.getElementById('error').textContent = 'Name and project key are required.';
+        document.getElementById('error').classList.remove('hidden');
+        return;
+      }
+      vscode.postMessage({ type: 'validateConnectionIdentity', name, projectKey });
     });
     document.getElementById('btn-save').addEventListener('click', () => {
+      const connectionId = document.getElementById('connection-id').value || undefined;
+      const clientId = document.getElementById('clientId').value.trim();
+      const clientSecret = document.getElementById('clientSecret').value.trim();
+      if (!clientId) {
+        document.getElementById('error').textContent = 'Client ID is required.';
+        document.getElementById('error').classList.remove('hidden');
+        return;
+      }
+      if (!connectionId && !clientSecret) {
+        document.getElementById('error').textContent = 'Client secret is required for new connections.';
+        document.getElementById('error').classList.remove('hidden');
+        return;
+      }
       vscode.postMessage({
         type: 'saveConnection',
         connectionId: document.getElementById('connection-id').value || undefined,
         connection: {
           name: document.getElementById('name').value,
           projectKey: document.getElementById('projectKey').value,
-          clientId: document.getElementById('clientId').value,
-          clientSecret: document.getElementById('clientSecret').value,
+          clientId,
+          clientSecret,
           authUrl: document.getElementById('authUrl').value,
           apiUrl: document.getElementById('apiUrl').value,
         }
@@ -651,14 +769,17 @@ export function renderStudioHtml(options: {
           if (action === 'disconnect') vscode.postMessage({ type: 'disconnect' });
           if (action === 'delete') vscode.postMessage({ type: 'deleteConnection', connectionId: id });
           if (action === 'edit' && conn) {
+            editingConnection = conn;
             document.getElementById('connection-id').value = conn.id;
             document.getElementById('form-title').textContent = 'Edit Connection';
             document.getElementById('name').value = conn.name;
             document.getElementById('projectKey').value = conn.projectKey;
-            document.getElementById('clientId').value = conn.clientId;
+            document.getElementById('clientId').value = '';
             document.getElementById('clientSecret').value = '';
-            document.getElementById('authUrl').value = conn.authUrl;
-            document.getElementById('apiUrl').value = conn.apiUrl;
+            document.getElementById('authUrl').value = '';
+            document.getElementById('apiUrl').value = '';
+            document.getElementById('identity-summary').textContent = '';
+            setFormStep(1);
           }
         });
       });
@@ -760,9 +881,14 @@ export function renderStudioHtml(options: {
       renderConnectDiagnostics(next.connectDiagnostics || []);
       renderTemplates(next.templates || []);
 
-      if (!document.getElementById('authUrl').value && next.defaults) {
-        document.getElementById('authUrl').value = next.defaults.authUrl || '';
-        document.getElementById('apiUrl').value = next.defaults.apiUrl || '';
+      if (typeof next.connectionFormStep === 'number') {
+        setFormStep(next.connectionFormStep);
+        if (next.connectionFormStep === 2) {
+          prepareCredentialsStep();
+        }
+        if (next.connectionFormStep === 1 && next.error === 'Connection saved.') {
+          resetConnectionForm();
+        }
       }
 
       const errorEl = document.getElementById('error');

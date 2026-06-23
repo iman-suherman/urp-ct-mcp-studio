@@ -9,6 +9,7 @@ import {
   GLOBAL_CACHED_TOOLS_KEY,
   GLOBAL_CONNECTION_STATUS_KEY,
 } from "./secrets";
+import { getSandboxBlockReason, warnIfSandboxBlocked } from "./sandboxMode";
 import {
   ConnectionHealth,
   ConnectionTestResult,
@@ -61,7 +62,30 @@ export class CommerceMcpManager {
     return this.context.globalState.get<MCPTool[]>(GLOBAL_CACHED_TOOLS_KEY, []);
   }
 
+  async validateConnectionIdentity(
+    input: Pick<MCPConnectionInput, "name" | "projectKey">
+  ): Promise<void> {
+    const name = input.name.trim();
+    const projectKey = input.projectKey.trim();
+
+    if (!name || !projectKey) {
+      throw new Error("Name and project key are required.");
+    }
+
+    const blockReason = getSandboxBlockReason({ name, projectKey });
+    if (blockReason) {
+      await vscode.window.showWarningMessage(blockReason);
+      throw new Error(blockReason);
+    }
+  }
+
   async saveConnection(input: MCPConnectionInput, existingId?: string): Promise<MCPConnection> {
+    await this.validateConnectionIdentity(input);
+
+    if (!input.clientId.trim()) {
+      throw new Error("Client ID is required.");
+    }
+
     const connection = await this.store.saveConnection(input, existingId);
     this.logs.info(`Saved connection "${connection.name}".`);
     this.notifyChanged();
@@ -69,6 +93,15 @@ export class CommerceMcpManager {
   }
 
   async selectConnection(id: string): Promise<void> {
+    const connection = await this.store.getConnection(id);
+    if (!connection) {
+      throw new Error("Connection not found.");
+    }
+
+    if (await warnIfSandboxBlocked(connection)) {
+      return;
+    }
+
     await this.store.setActiveConnection(id);
     this.notifyChanged();
   }
@@ -97,6 +130,12 @@ export class CommerceMcpManager {
     const connection = await this.store.getConnection(targetId);
     if (!connection) {
       throw new Error("Connection not found.");
+    }
+
+    const blockReason = getSandboxBlockReason(connection);
+    if (blockReason) {
+      await vscode.window.showWarningMessage(blockReason);
+      throw new Error(blockReason);
     }
 
     const clientSecret = await this.store.getClientSecret(connection.id);
@@ -254,6 +293,12 @@ export class CommerceMcpManager {
       throw new Error("Select a saved connection first.");
     }
 
+    const blockReason = getSandboxBlockReason(connection);
+    if (blockReason) {
+      await vscode.window.showWarningMessage(blockReason);
+      throw new Error(blockReason);
+    }
+
     const clientSecret = await this.store.getClientSecret(connection.id);
     if (!clientSecret) {
       throw new Error("Client secret is missing for the active connection.");
@@ -317,6 +362,10 @@ export async function maybeAutoConnect(context: vscode.ExtensionContext): Promis
   const manager = getCommerceMcpManager(context);
   const active = await manager.getActiveConnection();
   if (!active || (await manager.isConnected())) {
+    return;
+  }
+
+  if (getSandboxBlockReason(active)) {
     return;
   }
 

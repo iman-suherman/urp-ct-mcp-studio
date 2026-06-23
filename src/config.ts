@@ -13,6 +13,7 @@ export interface BundledConfig {
 }
 
 export interface ResolvedStudioConfig {
+  sandboxMode: boolean;
   autoConnectOnStartup: boolean;
   openExplorerOnConnect: boolean;
   syncNativeMcpConfig: boolean;
@@ -47,6 +48,7 @@ export function resolveStudioConfig(): ResolvedStudioConfig {
   const config = vscode.workspace.getConfiguration("ctMcp");
 
   return {
+    sandboxMode: config.get<boolean>("sandboxMode", true),
     autoConnectOnStartup: config.get<boolean>("autoConnectOnStartup", true),
     openExplorerOnConnect: config.get<boolean>("openExplorerOnConnect", true),
     syncNativeMcpConfig: config.get<boolean>("syncNativeMcpConfig", true),
