@@ -2,7 +2,7 @@
   "name": "ct-mcp-studio",
   "displayName": "Commerce MCP Studio",
   "description": "Configure, explore, test, and use Commerce MCP servers with commercetools projects.",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "publisher": "Suherman",
   "icon": "media/ct-mcp-vscode-extension-icon.png",
   "license": "MIT",
