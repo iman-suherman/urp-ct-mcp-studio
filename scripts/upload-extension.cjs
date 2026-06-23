@@ -7,8 +7,7 @@ const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
-const { getProjectAdcPath } = require("./gcp-lib-adc.cjs");
-const { loadDotenv } = require("./load-dotenv.cjs");
+const { applyGcpEnv } = require("./apply-gcp-env.cjs");
 const { assertSemver } = require("./semver.cjs");
 const { generateReleaseNotes, writeReleaseArtifacts } = require("./generate-release-notes.cjs");
 const { registerPluginVersion } = require("./register-version.cjs");
@@ -16,29 +15,16 @@ const { registerPluginVersion } = require("./register-version.cjs");
 const root = path.join(__dirname, "..");
 const shell = process.platform === "win32";
 
+let gcpEnv = process.env;
+
 function fail(message) {
   console.error(`upload: ${message}`);
   process.exit(1);
 }
 
-function applyGcpEnv() {
-  loadDotenv(root);
-
-  const projectAdc = getProjectAdcPath(root);
-  if (fs.existsSync(projectAdc)) {
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = projectAdc;
-    return;
-  }
-
-  const configured = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!configured) return;
-
-  const resolved = path.isAbsolute(configured)
-    ? configured
-    : path.join(root, configured);
-  if (fs.existsSync(resolved)) {
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = resolved;
-  }
+function ensureGcpEnv() {
+  gcpEnv = applyGcpEnv(root);
+  return gcpEnv;
 }
 
 function run(command, args) {
@@ -46,7 +32,7 @@ function run(command, args) {
     stdio: "inherit",
     cwd: root,
     shell,
-    env: process.env,
+    env: gcpEnv,
     encoding: "utf8",
   });
 
@@ -99,7 +85,7 @@ function bucketExists(bucket, projectId) {
       projectId,
       "--format=value(name)",
     ],
-    { cwd: root, shell, env: process.env, encoding: "utf8" }
+    { cwd: root, shell, env: gcpEnv, encoding: "utf8" }
   );
   return r.status === 0;
 }
@@ -126,7 +112,7 @@ function ensureBucket(bucket, projectId, location) {
 }
 
 async function uploadExtension(options = {}) {
-  applyGcpEnv();
+  ensureGcpEnv();
 
   const projectId = resolveGcpProjectId(root);
   if (!projectId) {

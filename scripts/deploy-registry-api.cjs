@@ -5,8 +5,7 @@ const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
-const { getProjectAdcPath } = require("./gcp-lib-adc.cjs");
-const { loadDotenv } = require("./load-dotenv.cjs");
+const { applyGcpEnv } = require("./apply-gcp-env.cjs");
 
 const root = path.join(__dirname, "..");
 const serviceDir = path.join(root, "services", "registry-api");
@@ -17,12 +16,8 @@ function fail(message) {
   process.exit(1);
 }
 
-function applyGcpEnv() {
-  loadDotenv(root);
-  const projectAdc = getProjectAdcPath(root);
-  if (fs.existsSync(projectAdc)) {
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = projectAdc;
-  }
+function ensureGcpEnv() {
+  return applyGcpEnv(root);
 }
 
 function run(command, args, options = {}) {
@@ -30,14 +25,14 @@ function run(command, args, options = {}) {
     stdio: "inherit",
     cwd: options.cwd || root,
     shell,
-    env: process.env,
+    env: ensureGcpEnv(),
   });
   if (r.error) throw r.error;
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
 function main() {
-  applyGcpEnv();
+  ensureGcpEnv();
 
   const projectId = resolveGcpProjectId(root);
   if (!projectId) fail("GCP_PROJECT_ID is not set. Run: npm run login");
