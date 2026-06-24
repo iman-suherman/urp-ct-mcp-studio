@@ -9,6 +9,39 @@ import { PROMPT_TEMPLATES } from "./templates";
 import { ConnectionHealth, LogEntry, MCPConnection } from "./types";
 import { ExtensionUpdateState, UpdateService } from "./updateService";
 
+const COPILOT_AGENT_EXAMPLE_PROMPT = "List commercetools products using Commerce MCP";
+
+async function openCopilotAgentChat(prompt: string): Promise<void> {
+  const attempts: Array<[string, unknown?]> = [
+    ["workbench.action.chat.open", { query: prompt, isPartialQuery: false }],
+    ["workbench.action.chat.open", { query: prompt }],
+    ["workbench.action.chat.open"],
+  ];
+
+  for (const entry of attempts) {
+    const [command, args] = entry;
+    try {
+      if (args !== undefined) {
+        await vscode.commands.executeCommand(command, args);
+      } else {
+        await vscode.commands.executeCommand(command);
+      }
+      return;
+    } catch {
+      // try next command variant
+    }
+  }
+
+  const action = await vscode.window.showInformationMessage(
+    "Open Copilot Chat → Agent mode, enable commerce-mcp / commerceMcpTools / commerceMcpCall in the tools picker, then run your prompt.",
+    "Copy example prompt"
+  );
+  if (action === "Copy example prompt") {
+    await vscode.env.clipboard.writeText(prompt);
+    void vscode.window.showInformationMessage("Example prompt copied to clipboard.");
+  }
+}
+
 export interface StudioPanelState {
   activeTab: "connections" | "tools" | "logs" | "templates";
   activeConnection?: MCPConnection;
@@ -57,6 +90,7 @@ export type StudioWebviewMessage =
   | { type: "toggleAutoUpdate"; enabled: boolean }
   | { type: "installUpdate" }
   | { type: "reloadWindow" }
+  | { type: "openCopilotAgent" }
   | { type: "copyChatPrompt"; text: string; agentContext?: boolean }
   | { type: "copyChatContext" }
   | { type: "copyAiPrompt"; toolName: string; description?: string }
@@ -312,6 +346,10 @@ export class StudioUiController {
 
       case "reloadWindow":
         await this.updateService.reloadWindow();
+        break;
+
+      case "openCopilotAgent":
+        await openCopilotAgentChat(COPILOT_AGENT_EXAMPLE_PROMPT);
         break;
     }
   }
@@ -641,6 +679,32 @@ export function renderStudioHtml(options: {
       color: var(--vscode-foreground);
       overflow-x: auto;
     }
+    .connection-copilot-hint {
+      border: 1px solid rgba(59,130,246,.35);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      background: rgba(59,130,246,.08);
+    }
+    .connection-copilot-hint-title {
+      font-size: 11px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    .connection-copilot-hint-desc {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      margin: 0 0 10px;
+      line-height: 1.45;
+    }
+    .connection-copilot-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .connection-copilot-actions button {
+      font-size: 11px;
+    }
     .connection-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
     button.primary {
       background: var(--vscode-button-background);
@@ -799,6 +863,19 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
     </div>
 
     <div id="connection-health" class="connection-health-grid hidden"></div>
+
+    <div id="connection-copilot-hint" class="connection-copilot-hint hidden">
+      <p class="connection-copilot-hint-title">Use with Copilot Agent</p>
+      <p class="connection-copilot-hint-desc">
+        Open <strong>Copilot Chat → Agent mode</strong> and enable
+        <code>commerce-mcp</code>, <code>commerceMcpTools</code>, or <code>commerceMcpCall</code>
+        in the tools picker. Then ask Copilot to run commercetools operations through MCP.
+      </p>
+      <div class="connection-copilot-actions">
+        <button id="btn-open-copilot" class="primary" type="button">Ask Copilot to list products</button>
+        <button id="btn-copy-copilot-prompt" type="button">Copy example prompt</button>
+      </div>
+    </div>
 
     <label class="connection-pref">
       <input type="checkbox" id="autoConnect" />
@@ -984,6 +1061,16 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
     document.getElementById('btn-explorer').addEventListener('click', () => {
       vscode.postMessage({ type: 'openExplorer' });
     });
+    document.getElementById('btn-open-copilot').addEventListener('click', () => {
+      vscode.postMessage({ type: 'openCopilotAgent' });
+    });
+    document.getElementById('btn-copy-copilot-prompt').addEventListener('click', () => {
+      vscode.postMessage({
+        type: 'copyChatPrompt',
+        text: 'List commercetools products using Commerce MCP',
+        agentContext: true
+      });
+    });
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
       vscode.postMessage({ type: 'clearLogs' });
     });
@@ -1084,6 +1171,7 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       const refreshBtn = document.getElementById('btn-refresh');
       const autoConnectEl = document.getElementById('autoConnect');
       const envHint = document.getElementById('connection-env-hint');
+      const copilotHint = document.getElementById('connection-copilot-hint');
 
       const profile = resolveConnectionProfile(next);
       const canConnect = next.hasWorkspaceEnvFiles && next.workspaceCredentials;
@@ -1121,6 +1209,10 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       if (envHint) {
         const showEnvHint = !next.hasWorkspaceEnvFiles && !connected && !busy;
         envHint.classList.toggle('hidden', !showEnvHint);
+      }
+
+      if (copilotHint) {
+        copilotHint.classList.toggle('hidden', !connected || busy);
       }
 
       if (profile) {

@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { MCPConnection } from "./types";
 import { resolveStudioConfig } from "./config";
 import { buildNativeMcpServerConfig } from "./mcpBootstrap";
+import { syncCopilotMcpSession } from "./copilotMcpBridge";
 
 function resolveUserMcpJsonPath(): string | undefined {
   const appName = vscode.env.appName.replace(/\s+/g, "-").toLowerCase() || "code-oss-dev";
@@ -18,6 +19,67 @@ function resolveUserMcpJsonPath(): string | undefined {
     return path.join(appData, appName, "User", "mcp.json");
   }
   return path.join(home, ".config", appName, "User", "mcp.json");
+}
+
+const WORKSPACE_MCP_FILE = path.join(".vscode", "mcp.json");
+
+function resolveWorkspaceMcpJsonPath(): string | undefined {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    return undefined;
+  }
+  return path.join(folder.uri.fsPath, WORKSPACE_MCP_FILE);
+}
+
+function readWorkspaceMcpPayload(filePath: string): Record<string, unknown> {
+  if (!fs.existsSync(filePath)) {
+    return { servers: {} };
+  }
+  try {
+    const payload = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+    if (!payload.servers || typeof payload.servers !== "object") {
+      payload.servers = {};
+    }
+    return payload;
+  } catch {
+    return { servers: {} };
+  }
+}
+
+function syncWorkspaceMcpJson(
+  connection: MCPConnection | undefined,
+  clientSecret: string | undefined,
+  extensionPath: string | undefined,
+  serverId: string
+): void {
+  if (!vscode.workspace.getConfiguration("ctMcp").get<boolean>("syncWorkspaceMcpConfig", true)) {
+    return;
+  }
+
+  const filePath = resolveWorkspaceMcpJsonPath();
+  if (!filePath) {
+    return;
+  }
+
+  const payload = readWorkspaceMcpPayload(filePath);
+  const servers = { ...((payload.servers as Record<string, unknown> | undefined) ?? {}) };
+
+  if (!connection || !clientSecret) {
+    delete servers[serverId];
+  } else {
+    servers[serverId] = buildNativeMcpServerConfig(connection, clientSecret, extensionPath);
+  }
+
+  if (Object.keys(servers).length === 0) {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    return;
+  }
+
+  payload.servers = servers;
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
 }
 
 export async function syncNativeMcpConfig(
@@ -37,6 +99,7 @@ export async function syncNativeMcpConfig(
   if (!connection || !clientSecret) {
     delete existingServers[serverId];
     await mcpConfig.update("servers", existingServers, vscode.ConfigurationTarget.Global);
+    syncWorkspaceMcpJson(undefined, undefined, extensionPath, serverId);
 
     const filePath = resolveUserMcpJsonPath();
     if (filePath && fs.existsSync(filePath)) {
@@ -52,11 +115,14 @@ export async function syncNativeMcpConfig(
     }
 
     await reloadNativeMcp();
+    await syncCopilotMcpSession(undefined, undefined, extensionPath ?? "");
     return;
   }
 
-  existingServers[serverId] = buildNativeMcpServerConfig(connection, clientSecret, extensionPath);
+  const serverConfig = buildNativeMcpServerConfig(connection, clientSecret, extensionPath);
+  existingServers[serverId] = serverConfig;
   await mcpConfig.update("servers", existingServers, vscode.ConfigurationTarget.Global);
+  syncWorkspaceMcpJson(connection, clientSecret, extensionPath, serverId);
 
   const filePath = resolveUserMcpJsonPath();
   if (filePath) {
@@ -79,6 +145,7 @@ export async function syncNativeMcpConfig(
   }
 
   await reloadNativeMcp();
+  await syncCopilotMcpSession(connection, clientSecret, extensionPath ?? "");
 }
 
 async function reloadNativeMcp(): Promise<void> {

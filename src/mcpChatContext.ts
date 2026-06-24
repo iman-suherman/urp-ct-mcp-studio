@@ -80,6 +80,27 @@ export function buildCommerceMcpChatContext(connection?: MCPConnection): string 
   return `${COMMERCE_MCP_AGENT_PLAYBOOK}${connectionBlock}`.trim();
 }
 
+export function buildCommerceMcpCopilotInstructions(connection: MCPConnection): string {
+  return `# Commerce MCP (connected)
+
+Commerce MCP Studio is connected to **${connection.name}** (\`${connection.projectKey}\`).
+
+## Required agent behavior
+
+1. **Use MCP tools first** — for commercetools products, carts, orders, customers, and project data, call \`commerce_mcp_list_tools\` then \`commerce_mcp_call_tool\`, or use the **${connection.name}** / **commerce-mcp** tools from Agent mode.
+2. **Probe before acting** — list tools and read tool schemas before calling write operations.
+3. **Direct execution** — run MCP tools directly; do not fabricate REST payloads unless MCP tools are unavailable.
+4. **Never expose secrets** — do not print client secrets, access tokens, or auth headers.
+
+## Active connection
+
+- **Project key:** ${connection.projectKey}
+- **Auth URL:** ${connection.authUrl}
+- **API URL:** ${connection.apiUrl}
+
+${COMMERCE_MCP_AGENT_PLAYBOOK}`;
+}
+
 export function buildProductSearchChatPrompt(limit = 5, connection?: MCPConnection): string {
   const projectHint = connection ? ` for project \`${connection.projectKey}\`` : "";
   return `Find ${limit} products${projectHint} using the smallest possible commercetools product search query.

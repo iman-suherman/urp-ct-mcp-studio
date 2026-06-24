@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { registerCopilotMcpIntegration } from "./copilotMcpBridge";
 import { ExplorerPanel } from "./explorerPanel";
 import { NavigatorPanel } from "./navigatorPanel";
 import { getCommerceMcpManager, maybeAutoConnect, deactivateCommerceMcpManager } from "./mcpManager";
@@ -9,6 +10,7 @@ import { ReleaseNotesPanel, VersionHistoryProvider } from "./versionHistory";
 
 export function activate(context: vscode.ExtensionContext): void {
   const manager = getCommerceMcpManager(context);
+  registerCopilotMcpIntegration(context, () => manager);
   const updateService = getUpdateService(context);
   const studioView = new StudioViewProvider(context, manager, updateService);
   const versionHistory = new VersionHistoryProvider(context);

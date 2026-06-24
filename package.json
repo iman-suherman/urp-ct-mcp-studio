@@ -113,7 +113,22 @@
         "ctMcp.syncNativeMcpConfig": {
           "type": "boolean",
           "default": true,
-          "description": "Sync the active connection into VS Code native mcp.servers for Chat integration."
+          "description": "Sync the active connection into VS Code native mcp.servers for Chat and Copilot Agent mode."
+        },
+        "ctMcp.syncWorkspaceMcpConfig": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write the active connection to .vscode/mcp.json so Copilot Agent mode can use commerce-mcp in this workspace."
+        },
+        "ctMcp.enableCopilotMcpIntegration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Expose Commerce MCP to Copilot Agent mode via language model tools and a dynamic MCP server definition when connected."
+        },
+        "ctMcp.syncCopilotInstructions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Update .github/copilot-instructions.md with Commerce MCP agent guidance while connected."
         },
         "ctMcp.dynamicToolLoadingThreshold": {
           "type": "number",
@@ -156,6 +171,58 @@
         }
       }
     },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "commerceMcpStudio",
+        "label": "Commerce MCP Studio"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "commerce_mcp_list_tools",
+        "displayName": "List Commerce MCP tools",
+        "toolReferenceName": "commerceMcpTools",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "commercetools",
+          "mcp",
+          "commerce"
+        ],
+        "modelDescription": "List commercetools MCP tools from the active Commerce MCP Studio connection. Use before calling commerce_mcp_call_tool.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "commerce_mcp_call_tool",
+        "displayName": "Call Commerce MCP tool",
+        "toolReferenceName": "commerceMcpCall",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "commercetools",
+          "mcp",
+          "commerce"
+        ],
+        "modelDescription": "Execute a commercetools MCP tool directly using the active Commerce MCP Studio connection (product search, carts, orders, customers, etc.).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "toolName": {
+              "type": "string",
+              "description": "MCP tool name, for example products.search"
+            },
+            "arguments": {
+              "type": "object",
+              "description": "JSON arguments for the MCP tool"
+            }
+          },
+          "required": [
+            "toolName"
+          ]
+        }
+      }
+    ],
     "commands": [
       {
         "command": "ctMcp.openStudio",
