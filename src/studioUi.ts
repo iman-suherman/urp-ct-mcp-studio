@@ -1115,6 +1115,8 @@ export function renderStudioHtml(options: {
       disconnectBtn.disabled = !connected || busy;
       refreshBtn.disabled = busy;
       connectBtn.textContent = busy ? 'Connecting…' : 'Connect';
+      connectBtn.classList.toggle('hidden', connected && !busy);
+      disconnectBtn.classList.toggle('hidden', !connected);
       if (autoConnectEl) {
         autoConnectEl.checked = next.autoConnectOnStartup === true;
       }
