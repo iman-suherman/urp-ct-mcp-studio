@@ -102,8 +102,8 @@
       "properties": {
         "ctMcp.autoConnectOnStartup": {
           "type": "boolean",
-          "default": true,
-          "description": "Reconnect to the last active Commerce MCP connection on startup."
+          "default": false,
+          "description": "When enabled, reconnect to the last active Commerce MCP connection on startup. Leave off to connect manually from the Studio panel."
         },
         "ctMcp.openExplorerOnConnect": {
           "type": "boolean",

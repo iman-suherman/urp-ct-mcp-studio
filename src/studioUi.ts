@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { resolveStudioConfig } from "./config";
 import { formatLogTimestamp } from "./logStore";
 import { buildAiPrompt, buildChatPrompt } from "./mcpBootstrap";
 import { buildProductSearchChatPrompt } from "./mcpChatContext";
@@ -23,11 +24,13 @@ export interface StudioPanelState {
   workspaceCredentials?: {
     name: string;
     projectKey: string;
+    clientId: string;
     source: string;
     authUrl: string;
     apiUrl: string;
     isAdmin: boolean;
   };
+  autoConnectOnStartup: boolean;
   currentVersion: string;
   latestVersion?: string;
   updateAvailable: boolean;
@@ -50,6 +53,7 @@ export type StudioWebviewMessage =
   | { type: "openNavigator" }
   | { type: "initProjectMcp" }
   | { type: "checkForUpdate" }
+  | { type: "toggleAutoConnect"; enabled: boolean }
   | { type: "toggleAutoUpdate"; enabled: boolean }
   | { type: "installUpdate" }
   | { type: "reloadWindow" }
@@ -155,12 +159,14 @@ export class StudioUiController {
         ? {
             name: workspaceCredentials.name,
             projectKey: workspaceCredentials.projectKey,
+            clientId: workspaceCredentials.clientId,
             source: workspaceCredentials.source,
             authUrl: workspaceCredentials.authUrl,
             apiUrl: workspaceCredentials.apiUrl,
             isAdmin: workspaceCredentials.isAdmin,
           }
         : undefined,
+      autoConnectOnStartup: resolveStudioConfig().autoConnectOnStartup,
       currentVersion: update.currentVersion,
       latestVersion: update.latestVersion,
       updateAvailable: update.updateAvailable,
@@ -296,6 +302,13 @@ export class StudioUiController {
           const text = err instanceof Error ? err.message : String(err);
           await this.pushState(text);
         }
+        break;
+
+      case "toggleAutoConnect":
+        await vscode.workspace
+          .getConfiguration("ctMcp")
+          .update("autoConnectOnStartup", message.enabled, vscode.ConfigurationTarget.Global);
+        await this.pushState();
         break;
 
       case "toggleAutoUpdate":
@@ -474,6 +487,156 @@ export function renderStudioHtml(options: {
     .status { font-size: 11px; margin: 8px 0; }
     .status.ok { color: #22c55e; }
     .status.bad { color: #ef4444; }
+    .connection-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
+    }
+    .connection-banner.disconnected {
+      background: rgba(148,163,184,.08);
+      border-color: rgba(148,163,184,.35);
+    }
+    .connection-banner.ready {
+      background: rgba(245,158,11,.08);
+      border-color: rgba(245,158,11,.35);
+    }
+    .connection-banner.connecting {
+      background: rgba(59,130,246,.08);
+      border-color: rgba(59,130,246,.35);
+    }
+    .connection-banner.connected {
+      background: rgba(34,197,94,.1);
+      border-color: rgba(34,197,94,.45);
+    }
+    .connection-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .connection-banner.disconnected .connection-dot { background: #94a3b8; }
+    .connection-banner.ready .connection-dot { background: #f59e0b; }
+    .connection-banner.connecting .connection-dot {
+      background: #3b82f6;
+      animation: connection-pulse 1.2s ease-in-out infinite;
+    }
+    .connection-banner.connected .connection-dot {
+      background: #22c55e;
+      box-shadow: 0 0 0 3px rgba(34,197,94,.22);
+    }
+    @keyframes connection-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(0.92); }
+    }
+    .connection-banner-text { min-width: 0; flex: 1; }
+    .connection-banner-title {
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+    .connection-banner-subtitle {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      line-height: 1.45;
+    }
+    .connection-details {
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      background: var(--vscode-editor-background);
+    }
+    .connection-details-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .connection-details-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--vscode-descriptionForeground);
+    }
+    .connection-scope-badge {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 2px 7px;
+      border-radius: 999px;
+      color: #22c55e;
+      background: rgba(34,197,94,.15);
+    }
+    .connection-props {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+    }
+    .connection-prop {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 8px;
+      font-size: 11px;
+      align-items: start;
+    }
+    .connection-prop dt {
+      margin: 0;
+      color: var(--vscode-descriptionForeground);
+    }
+    .connection-prop dd {
+      margin: 0;
+      word-break: break-all;
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .connection-health-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .health-chip {
+      font-size: 10px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: rgba(128,128,128,.08);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      line-height: 1.3;
+    }
+    .health-chip.ok { color: #22c55e; }
+    .health-chip.bad { color: #ef4444; }
+    .connection-pref {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      margin: 0 0 12px;
+      opacity: 0.92;
+      user-select: none;
+    }
+    .connection-pref input { width: auto; margin: 0; }
+    .connection-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    button.primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      font-weight: 600;
+    }
+    button.primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
     .health { font-size: 11px; line-height: 1.6; }
     .conn-item {
       border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.2));
@@ -587,24 +750,42 @@ export function renderStudioHtml(options: {
   <div id="busy" class="status hidden">Working…</div>
 
   <section id="panel-connections" class="panel active">
-    <div class="card">
-      <div class="status" id="connection-status">Not connected</div>
-      <div class="health" id="health"></div>
-      <div id="workspace-env-status" class="subtitle" style="margin-top:8px;">Scanning workspace .env files…</div>
-      <div class="row" style="margin-top:8px;">
-        <button id="btn-connect">Connect</button>
-        <button id="btn-disconnect" class="secondary disconnect-btn">Disconnect</button>
-        <button id="btn-refresh">Refresh</button>
+    <div id="connection-banner" class="connection-banner disconnected" role="status" aria-live="polite">
+      <span class="connection-dot" aria-hidden="true"></span>
+      <div class="connection-banner-text">
+        <div id="connection-banner-title" class="connection-banner-title">Not connected</div>
+        <div id="connection-banner-subtitle" class="connection-banner-subtitle">Scanning workspace credentials…</div>
       </div>
-      <div class="row">
-        <button id="btn-navigator">Navigate</button>
-        <button id="btn-explorer">Explorer</button>
-        <button id="btn-init-project" class="secondary">Init Project MCP</button>
-      </div>
-      <p class="subtitle" style="margin-top:6px;">Credentials are read from workspace <code>.env</code> (<code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>). Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code>.</p>
-      <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
-      <div id="connect-diagnostics" class="diag-list"></div>
     </div>
+
+    <div id="connection-details" class="connection-details hidden">
+      <div class="connection-details-header">
+        <span class="connection-details-label">Active profile</span>
+        <span id="connection-scope-badge" class="connection-scope-badge hidden">Admin</span>
+      </div>
+      <dl class="connection-props" id="connection-props"></dl>
+    </div>
+
+    <div id="connection-health" class="connection-health-grid hidden"></div>
+
+    <label class="connection-pref">
+      <input type="checkbox" id="autoConnect" />
+      Auto-connect on startup
+    </label>
+
+    <div class="connection-actions">
+      <button id="btn-connect" class="primary">Connect</button>
+      <button id="btn-disconnect" class="secondary disconnect-btn">Disconnect</button>
+      <button id="btn-refresh">Refresh</button>
+    </div>
+    <div class="row">
+      <button id="btn-navigator">Navigate</button>
+      <button id="btn-explorer">Explorer</button>
+      <button id="btn-init-project" class="secondary">Init Project MCP</button>
+    </div>
+    <p class="subtitle" style="margin-top:6px;">Credentials are read from workspace <code>.env</code> (<code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>). Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code>.</p>
+    <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
+    <div id="connect-diagnostics" class="diag-list"></div>
   </section>
 
   <section id="panel-tools" class="panel">
@@ -743,24 +924,6 @@ export function renderStudioHtml(options: {
       }
     }
 
-    function applyWorkspaceCredentials(workspaceCredentials, connected) {
-      const status = document.getElementById('workspace-env-status');
-      const connectBtn = document.getElementById('btn-connect');
-      const disconnectBtn = document.getElementById('btn-disconnect');
-      if (!workspaceCredentials) {
-        status.textContent = 'No commercetools credentials found in workspace .env files.';
-        connectBtn.disabled = true;
-        disconnectBtn.disabled = true;
-        return;
-      }
-      status.innerHTML =
-        'Credentials from <code>' + workspaceCredentials.source + '</code> · ' +
-        workspaceCredentials.projectKey +
-        (workspaceCredentials.isAdmin ? ' · admin client' : '');
-      connectBtn.disabled = connected;
-      disconnectBtn.disabled = !connected;
-    }
-
     function setTab(tab) {
       document.querySelectorAll('.tab').forEach(el => {
         el.classList.toggle('active', el.dataset.tab === tab);
@@ -811,37 +974,150 @@ export function renderStudioHtml(options: {
       const target = event.target;
       vscode.postMessage({ type: 'toggleAutoUpdate', enabled: target.checked });
     });
+    document.getElementById('autoConnect').addEventListener('change', (event) => {
+      const target = event.target;
+      vscode.postMessage({ type: 'toggleAutoConnect', enabled: target.checked });
+    });
 
-    function formatConnectionStatus(next) {
-      if (!next.connected) {
-        return next.connectionStatus || 'Not connected';
-      }
-      const name = next.activeConnection?.name;
-      const tools = next.health?.toolsLoaded;
-      if (name && tools != null) {
-        return 'Connected · ' + name + ' · ' + tools + ' tool(s) loaded';
-      }
-      if (name) {
-        return 'Connected · ' + name;
-      }
-      return next.connectionStatus || 'Connected';
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
 
-    function renderHealth(health, activeConnection) {
-      const el = document.getElementById('health');
-      if (!health) { el.textContent = ''; return; }
-      const lines = [];
-      if (activeConnection?.name) {
-        lines.push('Using connection: ' + activeConnection.name +
-          (activeConnection.projectKey ? ' · ' + activeConnection.projectKey : ''));
+    function maskClientId(clientId) {
+      if (!clientId) return '—';
+      if (clientId.length <= 10) return clientId;
+      return clientId.slice(0, 4) + '…' + clientId.slice(-4);
+    }
+
+    function resolveConnectionProfile(next) {
+      const conn = next.activeConnection;
+      const creds = next.workspaceCredentials;
+      if (conn) {
+        return {
+          name: conn.name,
+          projectKey: conn.projectKey,
+          clientId: conn.clientId,
+          authUrl: conn.authUrl,
+          apiUrl: conn.apiUrl,
+          isAdmin: conn.isAdmin,
+          source: creds ? creds.source : undefined,
+        };
       }
-      lines.push(
-        health.mcpRunning ? '✓ MCP Running' : '✗ MCP Not Running',
-        health.authValid ? '✓ Authentication Valid' : '✗ Authentication Invalid',
-        health.apiReachable ? '✓ API Reachable' : '✗ API Unreachable',
-        '✓ Tools Loaded (' + (health.toolsLoaded || 0) + ')'
-      );
-      el.textContent = lines.join('\\n');
+      if (creds) {
+        return {
+          name: creds.name,
+          projectKey: creds.projectKey,
+          clientId: creds.clientId,
+          authUrl: creds.authUrl,
+          apiUrl: creds.apiUrl,
+          isAdmin: creds.isAdmin,
+          source: creds.source,
+        };
+      }
+      return undefined;
+    }
+
+    function renderConnectionHealth(health) {
+      const el = document.getElementById('connection-health');
+      if (!health) {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+        return;
+      }
+      const chips = [
+        { ok: health.mcpRunning, label: health.mcpRunning ? 'MCP running' : 'MCP not running' },
+        { ok: health.authValid, label: health.authValid ? 'Auth valid' : 'Auth invalid' },
+        { ok: health.apiReachable, label: health.apiReachable ? 'API reachable' : 'API unreachable' },
+        { ok: (health.toolsLoaded || 0) > 0, label: (health.toolsLoaded || 0) + ' tools loaded' },
+      ];
+      el.classList.remove('hidden');
+      el.innerHTML = chips.map(function (chip) {
+        return '<div class="health-chip ' + (chip.ok ? 'ok' : 'bad') + '">' +
+          '<span aria-hidden="true">' + (chip.ok ? '✓' : '✗') + '</span>' +
+          '<span>' + chip.label + '</span>' +
+          '</div>';
+      }).join('');
+    }
+
+    function renderConnectionPanel(next) {
+      const banner = document.getElementById('connection-banner');
+      const title = document.getElementById('connection-banner-title');
+      const subtitle = document.getElementById('connection-banner-subtitle');
+      const details = document.getElementById('connection-details');
+      const props = document.getElementById('connection-props');
+      const scopeBadge = document.getElementById('connection-scope-badge');
+      const connectBtn = document.getElementById('btn-connect');
+      const disconnectBtn = document.getElementById('btn-disconnect');
+      const refreshBtn = document.getElementById('btn-refresh');
+      const autoConnectEl = document.getElementById('autoConnect');
+
+      const profile = resolveConnectionProfile(next);
+      const connected = next.connected === true;
+      const busy = next.busy === true;
+      const health = next.health;
+
+      banner.className = 'connection-banner';
+      if (busy) {
+        banner.classList.add('connecting');
+        title.textContent = 'Connecting…';
+        subtitle.textContent = profile
+          ? 'Starting Commerce MCP for ' + profile.name + ' · ' + profile.projectKey
+          : 'Starting Commerce MCP server…';
+      } else if (connected) {
+        banner.classList.add('connected');
+        title.textContent = 'Connected';
+        subtitle.textContent = (profile ? profile.name + ' · ' + profile.projectKey : 'Commerce MCP') +
+          ' · ' + (health && health.toolsLoaded != null ? health.toolsLoaded : 0) + ' tools loaded';
+      } else if (profile) {
+        banner.classList.add('ready');
+        title.textContent = 'Ready to connect';
+        subtitle.textContent = 'Click Connect to start ' + profile.name + ' (' + profile.projectKey + ')';
+      } else {
+        banner.classList.add('disconnected');
+        title.textContent = 'No credentials found';
+        subtitle.textContent = 'Add CTP_*, CTOOLS_*, or COMM_TOOLS_* variables to a workspace .env file';
+      }
+
+      if (profile) {
+        details.classList.remove('hidden');
+        scopeBadge.textContent = profile.isAdmin ? 'Admin client' : 'Standard client';
+        scopeBadge.classList.remove('hidden');
+        scopeBadge.style.color = profile.isAdmin ? '#22c55e' : 'var(--vscode-descriptionForeground)';
+        scopeBadge.style.background = profile.isAdmin ? 'rgba(34,197,94,.15)' : 'rgba(128,128,128,.12)';
+        const rows = [
+          ['Connection', profile.name],
+          ['Project key', profile.projectKey],
+          ['Client ID', maskClientId(profile.clientId)],
+          ['Auth URL', profile.authUrl || '—'],
+          ['API URL', profile.apiUrl || '—'],
+          ['Credentials', profile.source ? profile.source : '—'],
+          ['Status', connected ? 'Connected' : (busy ? 'Connecting…' : 'Disconnected')],
+        ];
+        if (connected && health && health.toolsLoaded != null) {
+          rows.push(['Tools', String(health.toolsLoaded) + ' loaded']);
+        }
+        props.innerHTML = rows.map(function (row) {
+          return '<div class="connection-prop"><dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(row[1]) + '</dd></div>';
+        }).join('');
+      } else {
+        details.classList.add('hidden');
+        props.innerHTML = '';
+        scopeBadge.classList.add('hidden');
+      }
+
+      renderConnectionHealth(connected ? health : undefined);
+
+      connectBtn.disabled = !profile || connected || busy;
+      disconnectBtn.disabled = !connected || busy;
+      refreshBtn.disabled = busy;
+      connectBtn.textContent = busy ? 'Connecting…' : 'Connect';
+      if (autoConnectEl) {
+        autoConnectEl.checked = next.autoConnectOnStartup === true;
+      }
     }
 
     function renderTools(groups) {
@@ -931,15 +1207,12 @@ export function renderStudioHtml(options: {
 
     function applyState(next) {
       state = next;
-      document.getElementById('connection-status').textContent = formatConnectionStatus(next);
-      document.getElementById('connection-status').className = 'status ' + (next.connected ? 'ok' : 'bad');
-      renderHealth(next.health, next.activeConnection);
+      renderConnectionPanel(next);
       renderTools(next.toolGroups || []);
       renderLogs(next.logs || []);
       renderConnectDiagnostics(next.connectDiagnostics || []);
       renderTemplates(next.templates || []);
       renderUpdatePanel(next);
-      applyWorkspaceCredentials(next.workspaceCredentials, next.connected);
 
       const errorEl = document.getElementById('error');
       if (next.error) {
