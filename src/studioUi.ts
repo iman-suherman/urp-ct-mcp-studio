@@ -4,7 +4,6 @@ import { formatLogTimestamp } from "./logStore";
 import { buildAiPrompt, buildChatPrompt } from "./mcpBootstrap";
 import { buildProductSearchChatPrompt } from "./mcpChatContext";
 import { CommerceMcpManager } from "./mcpManager";
-import { openProjectMcpFiles } from "./projectMcpInit";
 import { groupToolsByCategory } from "./toolCatalog";
 import { PROMPT_TEMPLATES } from "./templates";
 import { ConnectionHealth, LogEntry, MCPConnection } from "./types";
@@ -30,6 +29,8 @@ export interface StudioPanelState {
     apiUrl: string;
     isAdmin: boolean;
   };
+  hasWorkspaceEnvFiles: boolean;
+  workspaceEnvSources: string[];
   autoConnectOnStartup: boolean;
   currentVersion: string;
   latestVersion?: string;
@@ -51,7 +52,6 @@ export type StudioWebviewMessage =
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
   | { type: "openNavigator" }
-  | { type: "initProjectMcp" }
   | { type: "checkForUpdate" }
   | { type: "toggleAutoConnect"; enabled: boolean }
   | { type: "toggleAutoUpdate"; enabled: boolean }
@@ -86,6 +86,7 @@ export class StudioUiController {
 
   async pushState(error?: string, busy?: boolean): Promise<void> {
     const workspaceCredentials = this.manager.getWorkspaceCredentials();
+    const workspaceEnvSources = this.manager.getWorkspaceEnvFiles();
     const update = this.updateService.getState();
     const active = await this.manager.getActiveConnection();
     const connected = await this.manager.isConnected();
@@ -166,6 +167,8 @@ export class StudioUiController {
             isAdmin: workspaceCredentials.isAdmin,
           }
         : undefined,
+      hasWorkspaceEnvFiles: workspaceEnvSources.length > 0,
+      workspaceEnvSources,
       autoConnectOnStartup: resolveStudioConfig().autoConnectOnStartup,
       currentVersion: update.currentVersion,
       latestVersion: update.latestVersion,
@@ -235,26 +238,6 @@ export class StudioUiController {
 
       case "openNavigator":
         await vscode.commands.executeCommand("ctMcp.openNavigator");
-        break;
-
-      case "initProjectMcp":
-        await this.pushState(undefined, true);
-        try {
-          const result = await this.manager.initProjectMcpContext(this.context.extensionPath);
-          const action = await vscode.window.showInformationMessage(
-            `Project MCP initialized for ${result.connectionName} · ${result.projectKey}.`,
-            "Open .env.mcp"
-          );
-          if (action === "Open .env.mcp") {
-            await openProjectMcpFiles(result);
-          }
-          await this.pushState(
-            `Created ${result.files.length} file(s): ${result.files.join(", ")}`
-          );
-        } catch (err) {
-          const text = err instanceof Error ? err.message : String(err);
-          await this.pushState(text);
-        }
         break;
 
       case "copyChatPrompt": {
@@ -781,9 +764,8 @@ export function renderStudioHtml(options: {
     <div class="row">
       <button id="btn-navigator">Navigate</button>
       <button id="btn-explorer">Explorer</button>
-      <button id="btn-init-project" class="secondary">Init Project MCP</button>
     </div>
-    <p class="subtitle" style="margin-top:6px;">Credentials are read from workspace <code>.env</code> (<code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>). Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code>.</p>
+    <p class="subtitle" style="margin-top:6px;">Credentials are read from workspace <code>.env</code> (<code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>).</p>
     <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
     <div id="connect-diagnostics" class="diag-list"></div>
   </section>
@@ -953,9 +935,6 @@ export function renderStudioHtml(options: {
     document.getElementById('btn-explorer').addEventListener('click', () => {
       vscode.postMessage({ type: 'openExplorer' });
     });
-    document.getElementById('btn-init-project').addEventListener('click', () => {
-      vscode.postMessage({ type: 'initProjectMcp' });
-    });
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
       vscode.postMessage({ type: 'clearLogs' });
     });
@@ -994,31 +973,32 @@ export function renderStudioHtml(options: {
     }
 
     function resolveConnectionProfile(next) {
-      const conn = next.activeConnection;
+      if (!next.hasWorkspaceEnvFiles || !next.workspaceCredentials) {
+        return undefined;
+      }
       const creds = next.workspaceCredentials;
+      const conn = next.activeConnection;
+      return {
+        name: conn?.name || creds.name,
+        projectKey: creds.projectKey,
+        clientId: creds.clientId,
+        authUrl: creds.authUrl,
+        apiUrl: creds.apiUrl,
+        isAdmin: creds.isAdmin,
+        source: creds.source,
+      };
+    }
+
+    function connectionBannerLabel(next) {
+      const profile = resolveConnectionProfile(next);
+      if (profile) {
+        return profile.name + ' · ' + profile.projectKey;
+      }
+      const conn = next.activeConnection;
       if (conn) {
-        return {
-          name: conn.name,
-          projectKey: conn.projectKey,
-          clientId: conn.clientId,
-          authUrl: conn.authUrl,
-          apiUrl: conn.apiUrl,
-          isAdmin: conn.isAdmin,
-          source: creds ? creds.source : undefined,
-        };
+        return conn.name + ' · ' + conn.projectKey;
       }
-      if (creds) {
-        return {
-          name: creds.name,
-          projectKey: creds.projectKey,
-          clientId: creds.clientId,
-          authUrl: creds.authUrl,
-          apiUrl: creds.apiUrl,
-          isAdmin: creds.isAdmin,
-          source: creds.source,
-        };
-      }
-      return undefined;
+      return 'Commerce MCP';
     }
 
     function renderConnectionHealth(health) {
@@ -1056,6 +1036,7 @@ export function renderStudioHtml(options: {
       const autoConnectEl = document.getElementById('autoConnect');
 
       const profile = resolveConnectionProfile(next);
+      const canConnect = next.hasWorkspaceEnvFiles && next.workspaceCredentials;
       const connected = next.connected === true;
       const busy = next.busy === true;
       const health = next.health;
@@ -1070,16 +1051,21 @@ export function renderStudioHtml(options: {
       } else if (connected) {
         banner.classList.add('connected');
         title.textContent = 'Connected';
-        subtitle.textContent = (profile ? profile.name + ' · ' + profile.projectKey : 'Commerce MCP') +
+        subtitle.textContent = connectionBannerLabel(next) +
           ' · ' + (health && health.toolsLoaded != null ? health.toolsLoaded : 0) + ' tools loaded';
       } else if (profile) {
         banner.classList.add('ready');
         title.textContent = 'Ready to connect';
         subtitle.textContent = 'Click Connect to start ' + profile.name + ' (' + profile.projectKey + ')';
+      } else if (next.hasWorkspaceEnvFiles) {
+        banner.classList.add('disconnected');
+        title.textContent = 'Incomplete credentials';
+        subtitle.textContent = 'Add project key and client credentials to ' +
+          (next.workspaceEnvSources || []).join(', ');
       } else {
         banner.classList.add('disconnected');
-        title.textContent = 'No credentials found';
-        subtitle.textContent = 'Add CTP_*, CTOOLS_*, or COMM_TOOLS_* variables to a workspace .env file';
+        title.textContent = 'No .env files';
+        subtitle.textContent = 'Add a workspace .env file with commercetools credentials to connect';
       }
 
       if (profile) {
@@ -1111,7 +1097,7 @@ export function renderStudioHtml(options: {
 
       renderConnectionHealth(connected ? health : undefined);
 
-      connectBtn.disabled = !profile || connected || busy;
+      connectBtn.disabled = !canConnect || connected || busy;
       disconnectBtn.disabled = !connected || busy;
       refreshBtn.disabled = busy;
       connectBtn.textContent = busy ? 'Connecting…' : 'Connect';

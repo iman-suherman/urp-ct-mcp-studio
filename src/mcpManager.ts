@@ -7,6 +7,7 @@ import { syncNativeMcpConfig } from "./nativeMcpBridge";
 import { initProjectMcpContext, ProjectMcpInitResult } from "./projectMcpInit";
 import {
   findActiveWorkspaceCredentials,
+  findActiveWorkspaceEnvFiles,
   WorkspaceCredentials,
 } from "./workspaceEnvCredentials";
 import {
@@ -104,6 +105,10 @@ export class CommerceMcpManager {
 
   getWorkspaceCredentials(): WorkspaceCredentials | undefined {
     return findActiveWorkspaceCredentials();
+  }
+
+  getWorkspaceEnvFiles(): string[] {
+    return findActiveWorkspaceEnvFiles();
   }
 
   async ensureWorkspaceConnection(): Promise<MCPConnection | undefined> {

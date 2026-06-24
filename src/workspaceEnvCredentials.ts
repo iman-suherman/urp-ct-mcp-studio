@@ -235,16 +235,21 @@ function mergeEnvFiles(filePaths: string[]): { env: Record<string, string>; sour
   const env: Record<string, string> = {};
   const sources: string[] = [];
 
-  for (const filePath of filePaths) {
+  // Load lower-priority files first so higher-priority entries win (see ENV_FILE_PRIORITY).
+  for (const filePath of [...filePaths].reverse()) {
     const parsed = parseEnvFile(filePath);
     if (Object.keys(parsed).length === 0) {
       continue;
     }
-    sources.push(path.basename(filePath));
+    sources.unshift(path.basename(filePath));
     Object.assign(env, parsed);
   }
 
   return { env, sources };
+}
+
+export function listWorkspaceEnvFileNames(workspaceRoot: string): string[] {
+  return listWorkspaceEnvFiles(workspaceRoot).map((filePath) => path.basename(filePath));
 }
 
 export function findWorkspaceCredentials(
@@ -256,21 +261,34 @@ export function findWorkspaceCredentials(
     return undefined;
   }
 
-  for (const filePath of envFiles) {
-    const resolved = resolveCredentialsFromEnv(parseEnvFile(filePath), {
-      workspaceFolder: workspaceFolderName,
-      source: path.basename(filePath),
-    });
-    if (resolved) {
-      return resolved;
-    }
+  const merged = mergeEnvFiles(envFiles);
+  if (Object.keys(merged.env).length === 0) {
+    return undefined;
   }
 
-  const merged = mergeEnvFiles(envFiles);
   return resolveCredentialsFromEnv(merged.env, {
     workspaceFolder: workspaceFolderName,
     source: merged.sources.join(" + "),
   });
+}
+
+export function findActiveWorkspaceEnvFiles(): string[] {
+  // Lazy import keeps this module testable outside VS Code.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const vscode = require("vscode") as typeof import("vscode");
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders?.length) {
+    return [];
+  }
+
+  for (const folder of folders) {
+    const names = listWorkspaceEnvFileNames(folder.uri.fsPath);
+    if (names.length > 0) {
+      return names;
+    }
+  }
+
+  return [];
 }
 
 export function findActiveWorkspaceCredentials(): WorkspaceCredentials | undefined {
