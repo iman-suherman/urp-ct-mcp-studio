@@ -13,7 +13,6 @@ import {
   GLOBAL_CACHED_TOOLS_KEY,
   GLOBAL_CONNECTION_STATUS_KEY,
 } from "./secrets";
-import { getSandboxBlockReason, warnIfSandboxBlocked } from "./sandboxMode";
 import {
   ConnectionHealth,
   ConnectionTestResult,
@@ -74,12 +73,6 @@ export class CommerceMcpManager {
 
     if (!name || !projectKey) {
       throw new Error("Name and project key are required.");
-    }
-
-    const blockReason = getSandboxBlockReason({ name, projectKey });
-    if (blockReason) {
-      await vscode.window.showWarningMessage(blockReason);
-      throw new Error(blockReason);
     }
   }
 
@@ -176,10 +169,6 @@ export class CommerceMcpManager {
       throw new Error("Connection not found.");
     }
 
-    if (await warnIfSandboxBlocked(connection)) {
-      return;
-    }
-
     await this.store.setActiveConnection(id);
     this.notifyChanged();
   }
@@ -214,12 +203,6 @@ export class CommerceMcpManager {
     const connection = await this.store.getConnection(targetId);
     if (!connection) {
       throw new Error("Connection not found.");
-    }
-
-    const blockReason = getSandboxBlockReason(connection);
-    if (blockReason) {
-      await vscode.window.showWarningMessage(blockReason);
-      throw new Error(blockReason);
     }
 
     const clientSecret = await this.resolveClientSecret(connection);
@@ -382,12 +365,6 @@ export class CommerceMcpManager {
       throw new Error("No commercetools credentials found in workspace .env files.");
     }
 
-    const blockReason = getSandboxBlockReason(connection);
-    if (blockReason) {
-      await vscode.window.showWarningMessage(blockReason);
-      throw new Error(blockReason);
-    }
-
     const clientSecret = await this.resolveClientSecret(connection);
     if (!clientSecret) {
       throw new Error(
@@ -456,10 +433,6 @@ export async function maybeAutoConnect(context: vscode.ExtensionContext): Promis
     active = await manager.ensureWorkspaceConnection();
   }
   if (!active || (await manager.isConnected())) {
-    return;
-  }
-
-  if (getSandboxBlockReason(active)) {
     return;
   }
 

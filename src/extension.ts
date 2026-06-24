@@ -9,8 +9,8 @@ import { ReleaseNotesPanel, VersionHistoryProvider } from "./versionHistory";
 
 export function activate(context: vscode.ExtensionContext): void {
   const manager = getCommerceMcpManager(context);
-  const studioView = new StudioViewProvider(context, manager);
   const updateService = getUpdateService(context);
+  const studioView = new StudioViewProvider(context, manager, updateService);
   const versionHistory = new VersionHistoryProvider(context);
 
   context.subscriptions.push(
@@ -75,19 +75,22 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     vscode.commands.registerCommand("ctMcp.checkForUpdates", async () => {
-      const release = await updateService.checkForUpdates({ notify: true });
-      if (!release) {
+      await updateService.checkForUpdates({ force: true, suggestUpgrade: false });
+      await studioView.refresh();
+      const state = updateService.getState();
+      if (!state.latestVersion) {
         void vscode.window.showWarningMessage("Could not check for updates.");
         return;
       }
-      if (!updateService.hasUpdateAvailable()) {
+      if (!state.updateAvailable) {
         void vscode.window.showInformationMessage(
-          `Commerce MCP Studio ${context.extension.packageJSON.version} is up to date.`
+          `Commerce MCP Studio ${state.currentVersion} is up to date.`
         );
       }
     }),
     vscode.commands.registerCommand("ctMcp.downloadUpdate", async () => {
-      await updateService.downloadAndInstallUpdate();
+      await updateService.installUpdate();
+      await studioView.refresh();
     }),
     vscode.commands.registerCommand("ctMcp.openReleaseNotes", async (version?: string) => {
       const targetVersion =

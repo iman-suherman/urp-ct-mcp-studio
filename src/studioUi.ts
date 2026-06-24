@@ -7,6 +7,7 @@ import { openProjectMcpFiles } from "./projectMcpInit";
 import { groupToolsByCategory } from "./toolCatalog";
 import { PROMPT_TEMPLATES } from "./templates";
 import { ConnectionHealth, LogEntry, MCPConnection } from "./types";
+import { ExtensionUpdateState, UpdateService } from "./updateService";
 
 export interface StudioPanelState {
   activeTab: "connections" | "tools" | "logs" | "templates";
@@ -27,6 +28,14 @@ export interface StudioPanelState {
     apiUrl: string;
     isAdmin: boolean;
   };
+  currentVersion: string;
+  latestVersion?: string;
+  updateAvailable: boolean;
+  updatePhase: ExtensionUpdateState["updatePhase"];
+  updateProgress?: number;
+  updateNotes: string[];
+  updateError?: string;
+  autoUpdateExtension: boolean;
   error?: string;
   busy?: boolean;
 }
@@ -40,6 +49,10 @@ export type StudioWebviewMessage =
   | { type: "openExplorer"; toolName?: string }
   | { type: "openNavigator" }
   | { type: "initProjectMcp" }
+  | { type: "checkForUpdate" }
+  | { type: "toggleAutoUpdate"; enabled: boolean }
+  | { type: "installUpdate" }
+  | { type: "reloadWindow" }
   | { type: "copyChatPrompt"; text: string; agentContext?: boolean }
   | { type: "copyChatContext" }
   | { type: "copyAiPrompt"; toolName: string; description?: string }
@@ -55,6 +68,7 @@ export class StudioUiController {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly manager: CommerceMcpManager,
+    private readonly updateService: UpdateService,
     private readonly host: StudioUiHost
   ) {}
 
@@ -68,6 +82,7 @@ export class StudioUiController {
 
   async pushState(error?: string, busy?: boolean): Promise<void> {
     const workspaceCredentials = this.manager.getWorkspaceCredentials();
+    const update = this.updateService.getState();
     const active = await this.manager.getActiveConnection();
     const connected = await this.manager.isConnected();
     const tools = connected ? await this.manager.listTools() : [];
@@ -146,6 +161,14 @@ export class StudioUiController {
             isAdmin: workspaceCredentials.isAdmin,
           }
         : undefined,
+      currentVersion: update.currentVersion,
+      latestVersion: update.latestVersion,
+      updateAvailable: update.updateAvailable,
+      updatePhase: update.updatePhase,
+      updateProgress: update.updateProgress,
+      updateNotes: update.updateNotes,
+      updateError: update.updateError,
+      autoUpdateExtension: update.autoUpdateExtension,
       error,
       busy,
     });
@@ -154,6 +177,7 @@ export class StudioUiController {
   private async handleMessage(message: StudioWebviewMessage): Promise<void> {
     switch (message.type) {
       case "ready":
+        void this.updateService.checkOnPanelVisible();
         await this.pushState();
         break;
 
@@ -262,6 +286,37 @@ export class StudioUiController {
         this.manager.logs.clear();
         await this.pushState("Logs cleared.");
         break;
+
+      case "checkForUpdate":
+        await this.pushState(undefined, true);
+        try {
+          await this.updateService.checkForUpdates({ force: true, suggestUpgrade: false });
+          await this.pushState();
+        } catch (err) {
+          const text = err instanceof Error ? err.message : String(err);
+          await this.pushState(text);
+        }
+        break;
+
+      case "toggleAutoUpdate":
+        await this.updateService.setAutoUpdateEnabled(message.enabled);
+        await this.pushState();
+        break;
+
+      case "installUpdate":
+        await this.pushState(undefined, true);
+        try {
+          await this.updateService.installUpdate();
+          await this.pushState();
+        } catch (err) {
+          const text = err instanceof Error ? err.message : String(err);
+          await this.pushState(text);
+        }
+        break;
+
+      case "reloadWindow":
+        await this.updateService.reloadWindow();
+        break;
     }
   }
 }
@@ -292,16 +347,95 @@ export function renderStudioHtml(options: {
     }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 12px; }
-    .hero { text-align: center; margin-bottom: 12px; }
-    .logo { width: 104px; height: 104px; object-fit: contain; }
-    .logo-fallback {
-      width: 104px; height: 104px; margin: 0 auto;
-      display: grid; place-items: center;
-      border-radius: 12px; background: rgba(128,128,128,0.15);
-      font-weight: 700;
+    .studio-header {
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
     }
-    h1 { margin: 8px 0 4px; font-size: 16px; }
-    .subtitle { margin: 0; color: var(--vscode-descriptionForeground); font-size: 11px; }
+    .header-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .header-content { flex: 1; min-width: 0; }
+    .header-title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+    .hero { text-align: left; margin-bottom: 0; }
+    .logo { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
+    .logo-fallback {
+      width: 48px; height: 48px;
+      display: grid; place-items: center;
+      border-radius: 8px; background: rgba(128,128,128,0.15);
+      font-weight: 700; flex-shrink: 0;
+    }
+    h1 { margin: 0; font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .header-version {
+      font-size: 11px;
+      font-weight: 600;
+      opacity: 0.7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .header-update {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .header-update-btn {
+      font-size: 11px;
+      line-height: 1.2;
+      padding: 5px 10px;
+      min-width: 148px;
+      white-space: nowrap;
+    }
+    .header-auto-update {
+      font-size: 11px;
+      opacity: 0.85;
+      user-select: none;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .header-auto-update input { width: auto; margin: 0; }
+    .update-detail {
+      margin: 6px 0 0;
+      font-size: 11px;
+      opacity: 0.85;
+      color: var(--vscode-descriptionForeground);
+    }
+    .update-detail.error { color: #ef4444; opacity: 1; }
+    .update-progress {
+      height: 4px;
+      margin: 6px 0 0;
+      border-radius: 2px;
+      overflow: hidden;
+      background: var(--vscode-progressBar-background, rgba(128,128,128,.25));
+    }
+    .update-progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 2px;
+      background: var(--vscode-progressBar-foreground, var(--vscode-button-background));
+      transition: width 0.15s ease-out;
+    }
+    .update-notes {
+      margin: 6px 0 0;
+      padding-left: 18px;
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .subtitle { margin: 2px 0 0; color: var(--vscode-descriptionForeground); font-size: 11px; }
     .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 12px 0; }
     .tab, button {
       border: 1px solid var(--vscode-button-border, transparent);
@@ -417,11 +551,30 @@ export function renderStudioHtml(options: {
   </style>
 </head>
 <body>
-  <div class="hero">
-    ${logoHtml}
-    <h1>Commerce MCP</h1>
-    <p class="subtitle">Explore and test commercetools MCP using workspace credentials</p>
-  </div>
+  <header class="studio-header">
+    <div class="header-row">
+      ${logoHtml}
+      <div class="header-content">
+        <div class="header-title-row">
+          <h1>Commerce MCP</h1>
+          <span id="updateLabel" class="header-version">v—</span>
+        </div>
+        <p class="subtitle">Explore and test commercetools MCP using workspace credentials</p>
+      </div>
+    </div>
+    <div id="updatePanel" class="header-update">
+      <button id="updateActionBtn" type="button" class="header-update-btn">Check for updates</button>
+      <label class="header-auto-update">
+        <input type="checkbox" id="autoUpdate" checked />
+        Auto-check for updates
+      </label>
+    </div>
+    <p id="updateDetail" class="update-detail hidden"></p>
+    <div id="updateProgressBar" class="update-progress hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div id="updateProgressFill" class="update-progress-fill"></div>
+    </div>
+    <ul id="updateNotes" class="update-notes hidden"></ul>
+  </header>
 
   <div class="tabs">
     <button class="tab active" data-tab="connections">Connections</button>
@@ -483,6 +636,113 @@ export function renderStudioHtml(options: {
     const vscode = acquireVsCodeApi();
     let state = {};
 
+    function formatUpdateProgressLabel(phase, progress) {
+      const pct = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+      return phase === 'downloading'
+        ? 'Downloading update… ' + pct + '%'
+        : 'Installing update… ' + pct + '%';
+    }
+
+    function renderUpdatePanel(next) {
+      const updateLabel = document.getElementById('updateLabel');
+      const updateActionBtn = document.getElementById('updateActionBtn');
+      const autoUpdateEl = document.getElementById('autoUpdate');
+      const updateDetailEl = document.getElementById('updateDetail');
+      const updateProgressBarEl = document.getElementById('updateProgressBar');
+      const updateProgressFillEl = document.getElementById('updateProgressFill');
+      const updateNotesEl = document.getElementById('updateNotes');
+
+      const currentVersion = next.currentVersion || '0.0.0';
+      const latestVersion = next.latestVersion || '';
+      const updateAvailable = next.updateAvailable === true;
+      const updatePhase = next.updatePhase || 'idle';
+      const updateProgress = typeof next.updateProgress === 'number'
+        ? Math.max(0, Math.min(100, next.updateProgress))
+        : undefined;
+      const updateBusy = updatePhase === 'checking' || updatePhase === 'downloading' || updatePhase === 'installing';
+      const notes = Array.isArray(next.updateNotes) ? next.updateNotes : [];
+      const showProgressBar = (updatePhase === 'downloading' || updatePhase === 'installing') && updateProgress != null;
+
+      let versionText = 'v' + currentVersion;
+      if (updateAvailable && latestVersion && updatePhase !== 'installed') {
+        versionText += ' → v' + latestVersion;
+      } else if (updatePhase === 'installed' && latestVersion) {
+        versionText += ' → v' + latestVersion;
+      } else if (updatePhase === 'checking') {
+        versionText += ' · checking…';
+      } else if ((updatePhase === 'downloading' || updatePhase === 'installing') && updateProgress != null) {
+        versionText += ' · ' + updateProgress + '%';
+      }
+      if (updateLabel) updateLabel.textContent = versionText;
+
+      if (autoUpdateEl) autoUpdateEl.checked = next.autoUpdateExtension !== false;
+
+      if (updateActionBtn) {
+        updateActionBtn.disabled = updateBusy;
+        if (updatePhase === 'installed') {
+          updateActionBtn.textContent = 'Reload window';
+          updateActionBtn.disabled = false;
+        } else if (updatePhase === 'checking') {
+          updateActionBtn.textContent = 'Checking for updates…';
+        } else if (updatePhase === 'downloading' || updatePhase === 'installing') {
+          updateActionBtn.textContent = formatUpdateProgressLabel(updatePhase, updateProgress || 0);
+        } else if (updateAvailable) {
+          updateActionBtn.textContent = 'Install update now';
+        } else {
+          updateActionBtn.textContent = 'Check for updates';
+        }
+      }
+
+      if (updateDetailEl) {
+        updateDetailEl.classList.remove('error');
+        if (next.updateError) {
+          updateDetailEl.classList.remove('hidden');
+          updateDetailEl.classList.add('error');
+          updateDetailEl.textContent = next.updateError;
+        } else if (updatePhase === 'installed' && latestVersion) {
+          updateDetailEl.classList.remove('hidden');
+          updateDetailEl.textContent = 'Updated to v' + latestVersion + '. Reload VS Code to finish.';
+        } else if (updatePhase === 'downloading') {
+          updateDetailEl.classList.remove('hidden');
+          updateDetailEl.textContent = 'Downloading extension package…';
+        } else if (updatePhase === 'installing') {
+          updateDetailEl.classList.remove('hidden');
+          updateDetailEl.textContent = 'Installing extension package…';
+        } else if (updateAvailable) {
+          updateDetailEl.classList.remove('hidden');
+          updateDetailEl.textContent = 'A newer version is available from the CT MCP registry.';
+        } else if (updatePhase === 'checking') {
+          updateDetailEl.classList.remove('hidden');
+          updateDetailEl.textContent = 'Checking registry for updates…';
+        } else {
+          updateDetailEl.classList.add('hidden');
+          updateDetailEl.textContent = '';
+        }
+      }
+
+      if (updateProgressBarEl && updateProgressFillEl) {
+        updateProgressBarEl.classList.toggle('hidden', !showProgressBar);
+        if (showProgressBar) {
+          updateProgressFillEl.style.width = updateProgress + '%';
+          updateProgressBarEl.setAttribute('aria-valuenow', String(updateProgress));
+        } else {
+          updateProgressFillEl.style.width = '0%';
+        }
+      }
+
+      if (updateNotesEl) {
+        if (updateAvailable && notes.length && updatePhase !== 'installed') {
+          updateNotesEl.classList.remove('hidden');
+          updateNotesEl.innerHTML = notes.map(function (note) {
+            return '<li>' + note.replace(/</g, '&lt;') + '</li>';
+          }).join('');
+        } else {
+          updateNotesEl.classList.add('hidden');
+          updateNotesEl.innerHTML = '';
+        }
+      }
+    }
+
     function applyWorkspaceCredentials(workspaceCredentials, connected) {
       const status = document.getElementById('workspace-env-status');
       const connectBtn = document.getElementById('btn-connect');
@@ -535,6 +795,21 @@ export function renderStudioHtml(options: {
     });
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
       vscode.postMessage({ type: 'clearLogs' });
+    });
+    document.getElementById('updateActionBtn').addEventListener('click', () => {
+      if (state.updatePhase === 'installed') {
+        vscode.postMessage({ type: 'reloadWindow' });
+        return;
+      }
+      if (state.updateAvailable === true) {
+        vscode.postMessage({ type: 'installUpdate' });
+        return;
+      }
+      vscode.postMessage({ type: 'checkForUpdate' });
+    });
+    document.getElementById('autoUpdate').addEventListener('change', (event) => {
+      const target = event.target;
+      vscode.postMessage({ type: 'toggleAutoUpdate', enabled: target.checked });
     });
 
     function formatConnectionStatus(next) {
@@ -663,6 +938,7 @@ export function renderStudioHtml(options: {
       renderLogs(next.logs || []);
       renderConnectDiagnostics(next.connectDiagnostics || []);
       renderTemplates(next.templates || []);
+      renderUpdatePanel(next);
       applyWorkspaceCredentials(next.workspaceCredentials, next.connected);
 
       const errorEl = document.getElementById('error');

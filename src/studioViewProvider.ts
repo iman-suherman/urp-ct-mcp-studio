@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { logoUri, mediaRoot } from "./media";
 import { CommerceMcpManager } from "./mcpManager";
 import { renderStudioHtml, StudioUiController } from "./studioUi";
+import { UpdateService } from "./updateService";
 
 export class StudioViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = "ctMcp.studio";
@@ -10,9 +11,13 @@ export class StudioViewProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly manager: CommerceMcpManager
+    private readonly manager: CommerceMcpManager,
+    private readonly updateService: UpdateService
   ) {
     manager.onDidChange(() => {
+      void this.controller?.pushState();
+    });
+    updateService.onDidChange(() => {
       void this.controller?.pushState();
     });
   }
@@ -28,9 +33,14 @@ export class StudioViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [root],
     };
 
-    this.controller = new StudioUiController(this.context, this.manager, {
-      postMessage: (message) => webviewView.webview.postMessage(message),
-    });
+    this.controller = new StudioUiController(
+      this.context,
+      this.manager,
+      this.updateService,
+      {
+        postMessage: (message) => webviewView.webview.postMessage(message),
+      }
+    );
 
     webviewView.webview.html = renderStudioHtml({
       logoUri: logoUri(webviewView.webview, this.context.extensionUri),
@@ -40,6 +50,7 @@ export class StudioViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
+        void this.updateService.checkOnPanelVisible();
         void this.controller?.pushState();
       }
     });

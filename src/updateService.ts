@@ -1,42 +1,73 @@
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
-import { spawn } from "child_process";
 import * as vscode from "vscode";
 import { resolveUpdateConfig } from "./config";
 import { LatestRelease, RegistryClient } from "./registryClient";
 import { isNewerVersion } from "./semver";
 
-const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
-const DISMISSED_VERSION_KEY = "ctMcp.dismissedUpdateVersion";
+export const AUTO_UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+export const LAST_SUGGESTED_UPDATE_VERSION_KEY = "ctMcp.lastSuggestedUpdateVersion";
+export const PENDING_RELOAD_VERSION_KEY = "ctMcp.pendingReloadVersion";
+
+export type UpdatePhase = "idle" | "checking" | "downloading" | "installing" | "installed";
+
+export interface ExtensionUpdateState {
+  currentVersion: string;
+  latestVersion?: string;
+  updateAvailable: boolean;
+  updateNotes: string[];
+  updatePhase: UpdatePhase;
+  updateProgress?: number;
+  updateError?: string;
+  autoUpdateExtension: boolean;
+}
+
+export interface UpdateProgress {
+  phase: "downloading" | "installing";
+  percent: number;
+}
+
+const DOWNLOAD_PROGRESS_MAX = 90;
+const INSTALL_PROGRESS = 95;
+const VISIBILITY_CHECK_THROTTLE_MS = 5 * 60 * 1000;
+
+function downloadProgressPercent(downloaded: number, totalBytes?: number): number {
+  if (totalBytes && totalBytes > 0) {
+    return Math.min(
+      DOWNLOAD_PROGRESS_MAX,
+      Math.round((downloaded / totalBytes) * DOWNLOAD_PROGRESS_MAX)
+    );
+  }
+  return Math.min(85, Math.floor(downloaded / 200_000));
+}
 
 export class UpdateService implements vscode.Disposable {
-  private readonly statusBarItem: vscode.StatusBarItem;
   private readonly registry: RegistryClient;
   private readonly currentVersion: string;
+  private readonly changeEmitter = new vscode.EventEmitter<void>();
+  readonly onDidChange = this.changeEmitter.event;
+
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private latestRelease: LatestRelease | undefined;
   private checking = false;
+  private installing = false;
+  private phase: UpdatePhase = "idle";
+  private updateProgress: number | undefined;
+  private updateError: string | undefined;
+  private lastCheckAt = 0;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.currentVersion = context.extension.packageJSON.version as string;
     const config = resolveUpdateConfig();
     this.registry = new RegistryClient(config.registryApiUrl, config.pluginId);
-    this.statusBarItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Right,
-      50
-    );
-    this.statusBarItem.command = "ctMcp.checkForUpdates";
-    this.renderStatusBar(false);
-    this.statusBarItem.show();
   }
 
   start(): void {
-    this.context.subscriptions.push(this.statusBarItem);
-    void this.checkForUpdates({ notify: false });
+    void this.initializePhase();
+    void this.runAutoUpdateCheck();
     this.intervalId = setInterval(() => {
-      void this.checkForUpdates({ notify: true });
-    }, CHECK_INTERVAL_MS);
+      void this.runAutoUpdateCheck();
+    }, AUTO_UPDATE_CHECK_INTERVAL_MS);
     this.context.subscriptions.push({
       dispose: () => {
         if (this.intervalId) clearInterval(this.intervalId);
@@ -45,7 +76,7 @@ export class UpdateService implements vscode.Disposable {
   }
 
   dispose(): void {
-    this.statusBarItem.dispose();
+    this.changeEmitter.dispose();
     if (this.intervalId) clearInterval(this.intervalId);
   }
 
@@ -56,191 +87,331 @@ export class UpdateService implements vscode.Disposable {
   hasUpdateAvailable(): boolean {
     return Boolean(
       this.latestRelease &&
-        isNewerVersion(this.latestRelease.version, this.currentVersion)
+        isNewerVersion(this.latestRelease.version, this.currentVersion) &&
+        this.resolvePhase() !== "installed"
     );
   }
 
-  async checkForUpdates(options: { notify?: boolean } = {}): Promise<LatestRelease | null> {
+  isAutoUpdateEnabled(): boolean {
+    const config = vscode.workspace.getConfiguration("ctMcp");
+    if (config.has("autoUpdateExtension")) {
+      return config.get<boolean>("autoUpdateExtension", true);
+    }
+    return config.get<boolean>("updateCheckEnabled", true);
+  }
+
+  async setAutoUpdateEnabled(enabled: boolean): Promise<void> {
+    const config = vscode.workspace.getConfiguration("ctMcp");
+    await config.update("autoUpdateExtension", enabled, vscode.ConfigurationTarget.Global);
+    this.notifyChanged();
+    if (enabled) {
+      await this.checkForUpdates({ force: true, suggestUpgrade: true });
+    }
+  }
+
+  getState(): ExtensionUpdateState {
+    const resolvedPhase = this.resolvePhase();
+    const latestVersion = this.latestRelease?.version;
+    const updateAvailable =
+      resolvedPhase === "installed"
+        ? false
+        : Boolean(latestVersion && isNewerVersion(latestVersion, this.currentVersion));
+
+    let progress: number | undefined;
+    if (resolvedPhase === "installed") {
+      progress = 100;
+    } else if (resolvedPhase === "downloading" || resolvedPhase === "installing") {
+      progress = this.updateProgress;
+    }
+
+    return {
+      currentVersion: this.currentVersion,
+      latestVersion,
+      updateAvailable,
+      updateNotes: this.buildReleaseNotes(this.latestRelease),
+      updatePhase: resolvedPhase,
+      updateProgress: progress,
+      updateError: this.updateError,
+      autoUpdateExtension: this.isAutoUpdateEnabled(),
+    };
+  }
+
+  async checkOnPanelVisible(force = false): Promise<void> {
+    if (!this.isAutoUpdateEnabled()) {
+      return;
+    }
+    await this.checkForUpdates({
+      force,
+      suggestUpgrade: true,
+      throttleMs: VISIBILITY_CHECK_THROTTLE_MS,
+    });
+  }
+
+  async runAutoUpdateCheck(): Promise<void> {
+    if (!this.isAutoUpdateEnabled()) {
+      return;
+    }
+    await this.checkForUpdates({ force: true, suggestUpgrade: true });
+  }
+
+  async checkForUpdates(
+    options: {
+      notify?: boolean;
+      force?: boolean;
+      suggestUpgrade?: boolean;
+      throttleMs?: number;
+    } = {}
+  ): Promise<LatestRelease | null> {
     const config = resolveUpdateConfig();
-    if (!config.updateCheckEnabled) {
-      this.renderStatusBar(false);
+    if (!config.updateCheckEnabled && !this.isAutoUpdateEnabled()) {
       return null;
     }
-    if (this.checking) return this.latestRelease ?? null;
+    if (this.checking) {
+      return this.latestRelease ?? null;
+    }
+
+    const now = Date.now();
+    const throttleMs = options.throttleMs ?? 0;
+    if (!options.force && throttleMs > 0 && now - this.lastCheckAt < throttleMs) {
+      return this.latestRelease ?? null;
+    }
+
     this.checking = true;
+    if (this.resolvePhase() !== "installed") {
+      this.setPhase("checking");
+    }
+
     try {
+      this.lastCheckAt = now;
       const release = await this.registry.fetchLatestRelease(config.updateChannel);
       this.latestRelease = release ?? undefined;
+      this.updateError = undefined;
+
       const updateAvailable = Boolean(
         release && isNewerVersion(release.version, this.currentVersion)
       );
-      this.renderStatusBar(updateAvailable);
-      if (updateAvailable && options.notify !== false) {
-        await this.maybeNotify(release!);
+
+      if (this.resolvePhase() !== "installed") {
+        this.setPhase("idle");
       }
+
+      if (updateAvailable && options.suggestUpgrade !== false) {
+        await this.maybeSuggestUpgrade(release!, options.notify !== false);
+      }
+
+      this.notifyChanged();
       return release;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.renderStatusBar(false, message);
+      this.updateError = message;
+      if (this.resolvePhase() !== "installed") {
+        this.setPhase("idle", message);
+      } else {
+        this.notifyChanged();
+      }
       return null;
     } finally {
       this.checking = false;
     }
   }
 
-  async downloadAndInstallUpdate(): Promise<void> {
-    const release = this.latestRelease ?? (await this.checkForUpdates({ notify: false }));
+  async installUpdate(): Promise<void> {
+    if (this.installing) {
+      return;
+    }
+
+    let release = this.latestRelease;
     if (!release) {
-      void vscode.window.showInformationMessage("No release information available.");
+      release = (await this.checkForUpdates({ notify: false, force: true })) ?? undefined;
+    }
+    if (!release) {
+      this.updateError = "Could not find a release to install.";
+      this.setPhase("idle", this.updateError);
       return;
     }
     if (!isNewerVersion(release.version, this.currentVersion)) {
-      void vscode.window.showInformationMessage(
-        `Commerce MCP Studio ${this.currentVersion} is already up to date.`
-      );
+      this.setPhase("idle");
       return;
     }
 
-    const config = resolveUpdateConfig();
-    const downloadsDir = path.join(os.homedir(), config.downloadDir);
-    await fs.promises.mkdir(downloadsDir, { recursive: true });
-    const fileName = path.basename(new URL(release.downloadUrl).pathname);
-    const targetPath = path.join(downloadsDir, fileName);
+    this.installing = true;
+    this.updateError = undefined;
+    this.setPhase("downloading", undefined, 0);
 
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `Downloading Commerce MCP Studio ${release.version}`,
-        cancellable: false,
-      },
-      async () => {
-        const response = await fetch(release.downloadUrl);
-        if (!response.ok) {
-          throw new Error(`Download failed (${response.status})`);
-        }
-        const buffer = Buffer.from(await response.arrayBuffer());
-        await fs.promises.writeFile(targetPath, buffer);
+    try {
+      const vsixPath = await this.downloadVsix(release, (progress) => {
+        this.setPhase(progress.phase, undefined, progress.percent);
+      });
+
+      this.setPhase("installing", undefined, INSTALL_PROGRESS);
+      await vscode.commands.executeCommand(
+        "workbench.extensions.installExtension",
+        vscode.Uri.file(vsixPath)
+      );
+      this.setPhase("installing", undefined, 100);
+
+      await this.context.globalState.update(PENDING_RELOAD_VERSION_KEY, release.version);
+      await this.context.globalState.update(LAST_SUGGESTED_UPDATE_VERSION_KEY, release.version);
+      this.setPhase("installed");
+
+      const restart = await vscode.window.showInformationMessage(
+        `Commerce MCP Studio updated to v${release.version}. Reload the window to finish.`,
+        "Reload window",
+        "Later"
+      );
+      if (restart === "Reload window") {
+        await this.reloadWindow();
       }
-    );
-
-    await this.installVsix(targetPath, release.version);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.setPhase("idle", message);
+    } finally {
+      this.installing = false;
+    }
   }
 
-  private async installVsix(vsixPath: string, version: string): Promise<void> {
-    const cliPath = process.platform === "win32" ? "code.cmd" : "code";
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(cliPath, ["--install-extension", vsixPath, "--force"], {
-        stdio: "pipe",
-        shell: process.platform === "win32",
-      });
-      let stderr = "";
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-      child.on("error", reject);
-      child.on("close", (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(stderr.trim() || `Install failed with exit code ${code}`));
-      });
-    });
+  async reloadWindow(): Promise<void> {
+    await this.context.globalState.update(PENDING_RELOAD_VERSION_KEY, undefined);
+    await vscode.commands.executeCommand("workbench.action.reloadWindow");
+  }
 
-    const restart = await vscode.window.showInformationMessage(
-      `Commerce MCP Studio ${version} installed. Restart VS Code to use the new version?`,
-      "Restart Now",
+  /** @deprecated Use installUpdate() from the Studio panel. */
+  async downloadAndInstallUpdate(): Promise<void> {
+    await this.installUpdate();
+  }
+
+  private async initializePhase(): Promise<void> {
+    const pending = await this.getPendingReloadVersion();
+    if (pending) {
+      this.phase = "installed";
+      this.updateProgress = 100;
+    }
+  }
+
+  private resolvePhase(): UpdatePhase {
+    if (this.phase === "installed") {
+      return "installed";
+    }
+    const pending = this.context.globalState.get<string>(PENDING_RELOAD_VERSION_KEY);
+    if (pending?.trim()) {
+      return "installed";
+    }
+    return this.phase;
+  }
+
+  private async getPendingReloadVersion(): Promise<string | undefined> {
+    const value = this.context.globalState.get<string>(PENDING_RELOAD_VERSION_KEY);
+    return value?.trim() || undefined;
+  }
+
+  private setPhase(phase: UpdatePhase, error?: string, progress?: number): void {
+    this.phase = phase;
+    this.updateError = error;
+    this.updateProgress = progress;
+    this.notifyChanged();
+  }
+
+  private notifyChanged(): void {
+    this.changeEmitter.fire();
+  }
+
+  private buildReleaseNotes(release?: LatestRelease): string[] {
+    if (!release) {
+      return [];
+    }
+    if (release.highlights?.length) {
+      return release.highlights.slice(0, 5);
+    }
+    if (release.releaseNotes?.length) {
+      return release.releaseNotes.slice(0, 5);
+    }
+    if (release.summary?.trim()) {
+      return [release.summary.trim()];
+    }
+    return [];
+  }
+
+  private async maybeSuggestUpgrade(
+    release: LatestRelease,
+    showNotification: boolean
+  ): Promise<void> {
+    if (!showNotification || !this.isAutoUpdateEnabled()) {
+      return;
+    }
+
+    const lastSuggested = this.context.globalState.get<string>(LAST_SUGGESTED_UPDATE_VERSION_KEY);
+    if (lastSuggested === release.version) {
+      return;
+    }
+
+    await this.context.globalState.update(LAST_SUGGESTED_UPDATE_VERSION_KEY, release.version);
+
+    const headline = release.summary ?? `Commerce MCP Studio ${release.version} is available.`;
+    const choice = await vscode.window.showInformationMessage(
+      headline,
+      "Install update",
       "Later"
     );
-    if (restart === "Restart Now") {
-      await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    if (choice === "Install update") {
+      await this.installUpdate();
     }
   }
 
-  private renderStatusBar(updateAvailable: boolean, errorMessage?: string): void {
-    if (errorMessage) {
-      this.statusBarItem.text = "$(cloud-offline) CT MCP";
-      this.statusBarItem.tooltip = `Update check failed: ${errorMessage}`;
-      return;
-    }
-    if (updateAvailable && this.latestRelease) {
-      this.statusBarItem.text = "$(arrow-up) CT MCP Studio";
-      this.statusBarItem.tooltip = `Update available: ${this.latestRelease.version} (current ${this.currentVersion}). Click to check for updates.`;
-      this.statusBarItem.backgroundColor = new vscode.ThemeColor(
-        "statusBarItem.warningBackground"
-      );
-      return;
-    }
-    this.statusBarItem.backgroundColor = undefined;
-    this.statusBarItem.text = "$(check) CT MCP Studio";
-    this.statusBarItem.tooltip = `Commerce MCP Studio ${this.currentVersion} is up to date. Click to check for updates.`;
-  }
+  private async downloadVsix(
+    release: LatestRelease,
+    onProgress?: (progress: UpdateProgress) => void
+  ): Promise<string> {
+    const storageDir = this.context.globalStorageUri.fsPath;
+    await fs.promises.mkdir(storageDir, { recursive: true });
+    const fileName = `ct-mcp-studio-${release.version}.vsix`;
+    const targetPath = path.join(storageDir, fileName);
 
-  private async maybeNotify(release: LatestRelease): Promise<void> {
-    if (release.mandatory) {
-      await this.promptMandatoryUpdate(release);
-      return;
+    const response = await fetch(release.downloadUrl);
+    if (!response.ok) {
+      throw new Error(`Download failed (${response.status})`);
     }
 
-    const dismissed = this.context.globalState.get<string>(DISMISSED_VERSION_KEY);
-    if (dismissed === release.version) return;
+    const contentLength = response.headers.get("content-length");
+    const totalBytes = contentLength ? Number.parseInt(contentLength, 10) : undefined;
+    const validTotal =
+      totalBytes && Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined;
 
-    await this.promptOptionalUpdate(release);
-  }
+    const reportDownload = (downloaded: number): void => {
+      onProgress?.({
+        phase: "downloading",
+        percent: downloadProgressPercent(downloaded, validTotal),
+      });
+    };
 
-  private buildUpdateMessage(release: LatestRelease): string {
-    const headline = release.summary ?? `Commerce MCP Studio ${release.version} is available.`;
-    const bullets =
-      release.highlights?.slice(0, 3) ??
-      release.releaseNotes?.slice(0, 3) ??
-      [];
-    if (!bullets.length) return headline;
-    return `${headline}\n${bullets.map((item) => `• ${item}`).join("\n")}`;
-  }
+    const body = response.body;
+    if (!body) {
+      reportDownload(0);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      reportDownload(buffer.byteLength);
+      await fs.promises.writeFile(targetPath, buffer);
+      return targetPath;
+    }
 
-  private async promptMandatoryUpdate(release: LatestRelease): Promise<void> {
-    const choice = await vscode.window.showWarningMessage(
-      this.buildUpdateMessage(release),
-      { modal: true },
-      "Update Now",
-      "View Release Notes",
-      "View on Website"
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let downloaded = 0;
+    reportDownload(0);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      chunks.push(value);
+      downloaded += value.byteLength;
+      reportDownload(downloaded);
+    }
+
+    await fs.promises.writeFile(
+      targetPath,
+      Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
     );
-
-    if (choice === "Update Now") {
-      await this.downloadAndInstallUpdate();
-      return;
-    }
-    if (choice === "View Release Notes") {
-      await vscode.commands.executeCommand("ctMcp.openReleaseNotes", release.version);
-      return;
-    }
-    if (choice === "View on Website" && release.releaseNotesUrl) {
-      await vscode.env.openExternal(vscode.Uri.parse(release.releaseNotesUrl));
-    }
-  }
-
-  private async promptOptionalUpdate(release: LatestRelease): Promise<void> {
-    const choice = await vscode.window.showInformationMessage(
-      this.buildUpdateMessage(release),
-      "Update Now",
-      "View Release Notes",
-      "View on Website",
-      "Remind Me Later"
-    );
-
-    if (choice === "Update Now") {
-      await this.downloadAndInstallUpdate();
-      return;
-    }
-    if (choice === "View Release Notes") {
-      await vscode.commands.executeCommand("ctMcp.openReleaseNotes", release.version);
-      return;
-    }
-    if (choice === "View on Website" && release.releaseNotesUrl) {
-      await vscode.env.openExternal(vscode.Uri.parse(release.releaseNotesUrl));
-      return;
-    }
-    if (choice === "Remind Me Later") {
-      await this.context.globalState.update(DISMISSED_VERSION_KEY, release.version);
-    }
+    return targetPath;
   }
 }
 

@@ -100,11 +100,6 @@
     "configuration": {
       "title": "Commerce MCP Studio",
       "properties": {
-        "ctMcp.sandboxMode": {
-          "type": "boolean",
-          "default": true,
-          "description": "When enabled, blocks connections whose name or project key contains \"prod\" or \"qantas\"."
-        },
         "ctMcp.autoConnectOnStartup": {
           "type": "boolean",
           "default": true,
@@ -130,10 +125,15 @@
           "default": "@commercetools/commerce-mcp@latest",
           "description": "npm package used to spawn the Commerce MCP server."
         },
+        "ctMcp.autoUpdateExtension": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check for extension updates every 4 hours and show install prompts."
+        },
         "ctMcp.updateCheckEnabled": {
           "type": "boolean",
           "default": true,
-          "description": "Check the CT MCP registry for extension updates on startup and every 12 hours."
+          "description": "Deprecated alias for autoUpdateExtension. When disabled, background update checks are skipped."
         },
         "ctMcp.updateChannel": {
           "type": "string",
