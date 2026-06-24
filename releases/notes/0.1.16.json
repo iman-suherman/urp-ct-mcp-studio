@@ -1,0 +1,9 @@
+{
+  "version": "0.1.16",
+  "summary": "Commerce MCP Studio 0.1.16: version sync release.",
+  "releaseNotes": {
+    "changed": [
+      "Package version aligned with latest published release"
+    ]
+  }
+}

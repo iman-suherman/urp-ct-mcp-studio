@@ -37,6 +37,7 @@ export type LatestRelease = {
   releaseNotes?: string[];
   releaseNotesMarkdown?: string | null;
   releaseNotesStructured?: ReleaseNotes | null;
+  highlights?: string[];
   sizeBytes?: number | null;
 };
 

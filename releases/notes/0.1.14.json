@@ -1,0 +1,13 @@
+{
+  "version": "0.1.14",
+  "summary": "Commerce MCP Studio 0.1.14: semantic Navigator search and sidebar UX polish.",
+  "releaseNotes": {
+    "introduced": [
+      "Semantic search in MCP Navigator to find tools by intent"
+    ],
+    "changed": [
+      "Streamlined connection actions in the sidebar",
+      "Hero image on the marketing website landing page"
+    ]
+  }
+}

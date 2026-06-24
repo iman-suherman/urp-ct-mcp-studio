@@ -1,0 +1,9 @@
+{
+  "version": "0.1.12",
+  "summary": "Commerce MCP Studio 0.1.12: one-click project MCP setup for your workspace.",
+  "releaseNotes": {
+    "introduced": [
+      "Init Project MCP writes .env.mcp, .cursor/mcp.json, and agent rules into the open workspace"
+    ]
+  }
+}

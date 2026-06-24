@@ -54,8 +54,6 @@ export class ConnectionStore {
 
     if (input.clientSecret.trim()) {
       await this.context.secrets.store(clientSecretKey(id), input.clientSecret.trim());
-    } else if (!existing) {
-      throw new Error("Client secret is required for new connections.");
     }
 
     const next = existing

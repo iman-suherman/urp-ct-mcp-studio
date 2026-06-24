@@ -1,0 +1,10 @@
+{
+  "version": "0.1.7",
+  "summary": "Commerce MCP Studio 0.1.7: website build reliability and registry client updates.",
+  "releaseNotes": {
+    "changed": [
+      "Website Docker build hardened with npm retries and dockerignore",
+      "Website fetches latest version from the registry API on the client"
+    ]
+  }
+}

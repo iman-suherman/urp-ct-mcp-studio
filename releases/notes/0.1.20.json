@@ -1,0 +1,12 @@
+{
+  "version": "0.1.20",
+  "summary": "Commerce MCP Studio 0.1.20: website analytics and deploy pipeline improvements.",
+  "releaseNotes": {
+    "introduced": [
+      "Google Analytics 4 on the marketing website"
+    ],
+    "changed": [
+      "CI pipeline tracks infra download worker deploys"
+    ]
+  }
+}

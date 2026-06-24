@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import { resolveStudioConfig } from "./config";
 import { formatLogTimestamp } from "./logStore";
 import { buildAiPrompt, buildChatPrompt } from "./mcpBootstrap";
 import { buildProductSearchChatPrompt } from "./mcpChatContext";
@@ -11,13 +10,6 @@ import { ConnectionHealth, LogEntry, MCPConnection } from "./types";
 
 export interface StudioPanelState {
   activeTab: "connections" | "tools" | "logs" | "templates";
-  connections: Array<
-    MCPConnection & {
-      isActive: boolean;
-      isConnected: boolean;
-      hasSecret: boolean;
-    }
-  >;
   activeConnection?: MCPConnection;
   connected: boolean;
   connectionStatus?: string;
@@ -27,24 +19,22 @@ export interface StudioPanelState {
   logs: Array<{ time: string; level: string; message: string; toolName?: string }>;
   connectDiagnostics: Array<{ time: string; level: string; message: string }>;
   templates: Array<{ id: string; title: string; description: string; prompt: string; toolName: string }>;
-  defaults: {
+  workspaceCredentials?: {
+    name: string;
+    projectKey: string;
+    source: string;
     authUrl: string;
     apiUrl: string;
+    isAdmin: boolean;
   };
   error?: string;
   busy?: boolean;
-  connectionFormStep?: 1 | 2;
 }
 
 export type StudioWebviewMessage =
   | { type: "ready" }
   | { type: "switchTab"; tab: StudioPanelState["activeTab"] }
-  | { type: "saveConnection"; connection: Record<string, unknown>; connectionId?: string }
-  | { type: "validateConnectionIdentity"; name: string; projectKey: string }
-  | { type: "backConnectionIdentity" }
-  | { type: "deleteConnection"; connectionId: string }
-  | { type: "selectConnection"; connectionId: string }
-  | { type: "connect"; connectionId?: string }
+  | { type: "connectFromWorkspace" }
   | { type: "disconnect" }
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
@@ -61,7 +51,6 @@ export interface StudioUiHost {
 
 export class StudioUiController {
   private activeTab: StudioPanelState["activeTab"] = "connections";
-  private connectionFormStep: 1 | 2 = 1;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -77,16 +66,8 @@ export class StudioUiController {
     );
   }
 
-  async pushState(
-    error?: string,
-    busy?: boolean,
-    connectionFormStep?: 1 | 2
-  ): Promise<void> {
-    if (connectionFormStep !== undefined) {
-      this.connectionFormStep = connectionFormStep;
-    }
-    const config = resolveStudioConfig();
-    const connections = await this.manager.listConnections();
+  async pushState(error?: string, busy?: boolean): Promise<void> {
+    const workspaceCredentials = this.manager.getWorkspaceCredentials();
     const active = await this.manager.getActiveConnection();
     const connected = await this.manager.isConnected();
     const tools = connected ? await this.manager.listTools() : [];
@@ -95,15 +76,6 @@ export class StudioUiController {
         ...tool,
         category: tool.name.includes(".") ? tool.name.split(".")[0] : "other",
         action: tool.name.includes(".") ? tool.name.split(".").slice(1).join(".") : tool.name,
-      }))
-    );
-
-    const connectionsWithMeta = await Promise.all(
-      connections.map(async (connection) => ({
-        ...connection,
-        isActive: active?.id === connection.id,
-        isConnected: connected && active?.id === connection.id,
-        hasSecret: await this.manager["store"].hasClientSecret(connection.id),
       }))
     );
 
@@ -130,7 +102,6 @@ export class StudioUiController {
     await this.host.postMessage({
       type: "state",
       activeTab: this.activeTab,
-      connections: connectionsWithMeta,
       activeConnection: active,
       connected,
       connectionStatus: this.manager.getConnectionStatusMessage(),
@@ -165,13 +136,18 @@ export class StudioUiController {
         prompt: template.prompt,
         toolName: template.toolName,
       })),
-      defaults: {
-        authUrl: config.defaultAuthUrl,
-        apiUrl: config.defaultApiUrl,
-      },
+      workspaceCredentials: workspaceCredentials
+        ? {
+            name: workspaceCredentials.name,
+            projectKey: workspaceCredentials.projectKey,
+            source: workspaceCredentials.source,
+            authUrl: workspaceCredentials.authUrl,
+            apiUrl: workspaceCredentials.apiUrl,
+            isAdmin: workspaceCredentials.isAdmin,
+          }
+        : undefined,
       error,
       busy,
-      connectionFormStep: this.connectionFormStep,
     });
   }
 
@@ -186,64 +162,19 @@ export class StudioUiController {
         await this.pushState();
         break;
 
-      case "saveConnection": {
-        const payload = message.connection;
-        try {
-          await this.manager.saveConnection(
-            {
-              name: String(payload.name ?? ""),
-              projectKey: String(payload.projectKey ?? ""),
-              clientId: String(payload.clientId ?? ""),
-              clientSecret: String(payload.clientSecret ?? ""),
-              authUrl: String(payload.authUrl ?? ""),
-              apiUrl: String(payload.apiUrl ?? ""),
-              enabledTools: ["all"],
-              isAdmin: true,
-            },
-            message.connectionId
-          );
-          this.connectionFormStep = 1;
-          await this.pushState("Connection saved.", false, 1);
-        } catch (err) {
-          const text = err instanceof Error ? err.message : String(err);
-          await this.pushState(text, false, 2);
-        }
-        break;
-      }
-
-      case "validateConnectionIdentity":
+      case "connectFromWorkspace":
         await this.pushState(undefined, true);
         try {
-          await this.manager.validateConnectionIdentity({
-            name: message.name,
-            projectKey: message.projectKey,
-          });
-          await this.pushState(undefined, false, 2);
-        } catch (err) {
-          const text = err instanceof Error ? err.message : String(err);
-          await this.pushState(text, false, 1);
-        }
-        break;
-
-      case "backConnectionIdentity":
-        this.connectionFormStep = 1;
-        await this.pushState(undefined, false, 1);
-        break;
-
-      case "deleteConnection":
-        await this.manager.deleteConnection(message.connectionId);
-        await this.pushState("Connection deleted.");
-        break;
-
-      case "selectConnection":
-        await this.manager.selectConnection(message.connectionId);
-        await this.pushState();
-        break;
-
-      case "connect":
-        await this.pushState(undefined, true);
-        try {
-          await this.manager.connect(message.connectionId, { openExplorer: false });
+          const connection = await this.manager.ensureWorkspaceConnection();
+          if (!connection) {
+            await this.pushState(
+              "No commercetools credentials found in workspace .env files."
+            );
+            break;
+          }
+          if (!(await this.manager.isConnected())) {
+            await this.manager.connect(connection.id, { openExplorer: false });
+          }
           await this.pushState(undefined, false);
         } catch (err) {
           const text = err instanceof Error ? err.message : String(err);
@@ -489,7 +420,7 @@ export function renderStudioHtml(options: {
   <div class="hero">
     ${logoHtml}
     <h1>Commerce MCP</h1>
-    <p class="subtitle">Configure, explore, and test commercetools MCP</p>
+    <p class="subtitle">Explore and test commercetools MCP using workspace credentials</p>
   </div>
 
   <div class="tabs">
@@ -506,45 +437,20 @@ export function renderStudioHtml(options: {
     <div class="card">
       <div class="status" id="connection-status">Not connected</div>
       <div class="health" id="health"></div>
-      <div class="row">
+      <div id="workspace-env-status" class="subtitle" style="margin-top:8px;">Scanning workspace .env files…</div>
+      <div class="row" style="margin-top:8px;">
+        <button id="btn-connect">Connect</button>
+        <button id="btn-disconnect" class="secondary disconnect-btn">Disconnect</button>
         <button id="btn-refresh">Refresh</button>
+      </div>
+      <div class="row">
         <button id="btn-navigator">Navigate</button>
         <button id="btn-explorer">Explorer</button>
         <button id="btn-init-project" class="secondary">Init Project MCP</button>
       </div>
-      <p class="subtitle" style="margin-top:6px;">Connect or disconnect from saved connections below. Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code> into the open workspace.</p>
+      <p class="subtitle" style="margin-top:6px;">Credentials are read from workspace <code>.env</code> (<code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>). Init writes <code>.cursor/mcp.json</code> and <code>.env.mcp</code>.</p>
       <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
       <div id="connect-diagnostics" class="diag-list"></div>
-    </div>
-
-    <div class="card">
-      <strong>Saved Connections</strong>
-      <div id="connections-list"></div>
-    </div>
-
-    <div class="card">
-      <strong id="form-title">Add Connection</strong>
-      <p class="subtitle" id="form-step-label">Step 1 of 2 — Project identity</p>
-      <input type="hidden" id="connection-id" />
-      <div id="connection-step-identity">
-        <div class="field"><label>Name</label><input id="name" placeholder="Qantas SIT" /></div>
-        <div class="field"><label>Project Key</label><input id="projectKey" placeholder="my-project" /></div>
-        <div class="row">
-          <button id="btn-continue">Continue</button>
-          <button id="btn-reset-form" class="secondary">Reset</button>
-        </div>
-      </div>
-      <div id="connection-step-credentials" class="hidden">
-        <div class="identity-summary" id="identity-summary"></div>
-        <div class="field"><label>Client ID</label><input id="clientId" /></div>
-        <div class="field"><label>Client Secret</label><input id="clientSecret" type="password" /></div>
-        <div class="field"><label>API URL</label><input id="apiUrl" /></div>
-        <div class="field"><label>Auth URL</label><input id="authUrl" /></div>
-        <div class="row">
-          <button id="btn-save">Save Connection</button>
-          <button id="btn-back-identity" class="secondary">Back</button>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -576,51 +482,23 @@ export function renderStudioHtml(options: {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     let state = {};
-    let editingConnection = null;
 
-    function setFormStep(step) {
-      document.getElementById('connection-step-identity').classList.toggle('hidden', step !== 1);
-      document.getElementById('connection-step-credentials').classList.toggle('hidden', step !== 2);
-      document.getElementById('form-step-label').textContent =
-        step === 1 ? 'Step 1 of 2 — Project identity' : 'Step 2 of 2 — Credentials';
-    }
-
-    function updateIdentitySummary() {
-      const name = document.getElementById('name').value.trim();
-      const projectKey = document.getElementById('projectKey').value.trim();
-      document.getElementById('identity-summary').innerHTML =
-        name && projectKey
-          ? 'Connecting to <strong>' + name + '</strong> · <strong>' + projectKey + '</strong>'
-          : '';
-    }
-
-    function prepareCredentialsStep() {
-      updateIdentitySummary();
-      if (editingConnection) {
-        document.getElementById('clientId').value = editingConnection.clientId;
-        document.getElementById('authUrl').value = editingConnection.authUrl;
-        document.getElementById('apiUrl').value = editingConnection.apiUrl;
-        document.getElementById('clientSecret').value = '';
-      } else {
-        document.getElementById('clientId').value = '';
-        document.getElementById('clientSecret').value = '';
-        document.getElementById('authUrl').value = state.defaults?.authUrl || '';
-        document.getElementById('apiUrl').value = state.defaults?.apiUrl || '';
+    function applyWorkspaceCredentials(workspaceCredentials, connected) {
+      const status = document.getElementById('workspace-env-status');
+      const connectBtn = document.getElementById('btn-connect');
+      const disconnectBtn = document.getElementById('btn-disconnect');
+      if (!workspaceCredentials) {
+        status.textContent = 'No commercetools credentials found in workspace .env files.';
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = true;
+        return;
       }
-    }
-
-    function resetConnectionForm() {
-      editingConnection = null;
-      document.getElementById('connection-id').value = '';
-      document.getElementById('form-title').textContent = 'Add Connection';
-      document.getElementById('name').value = '';
-      document.getElementById('projectKey').value = '';
-      document.getElementById('clientId').value = '';
-      document.getElementById('clientSecret').value = '';
-      document.getElementById('authUrl').value = state.defaults?.authUrl || '';
-      document.getElementById('apiUrl').value = state.defaults?.apiUrl || '';
-      document.getElementById('identity-summary').textContent = '';
-      setFormStep(1);
+      status.innerHTML =
+        'Credentials from <code>' + workspaceCredentials.source + '</code> · ' +
+        workspaceCredentials.projectKey +
+        (workspaceCredentials.isAdmin ? ' · admin client' : '');
+      connectBtn.disabled = connected;
+      disconnectBtn.disabled = !connected;
     }
 
     function setTab(tab) {
@@ -640,6 +518,12 @@ export function renderStudioHtml(options: {
     document.getElementById('btn-refresh').addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh' });
     });
+    document.getElementById('btn-connect').addEventListener('click', () => {
+      vscode.postMessage({ type: 'connectFromWorkspace' });
+    });
+    document.getElementById('btn-disconnect').addEventListener('click', () => {
+      vscode.postMessage({ type: 'disconnect' });
+    });
     document.getElementById('btn-navigator').addEventListener('click', () => {
       vscode.postMessage({ type: 'openNavigator' });
     });
@@ -651,50 +535,6 @@ export function renderStudioHtml(options: {
     });
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
       vscode.postMessage({ type: 'clearLogs' });
-    });
-    document.getElementById('btn-reset-form').addEventListener('click', () => {
-      resetConnectionForm();
-    });
-    document.getElementById('btn-back-identity').addEventListener('click', () => {
-      setFormStep(1);
-      vscode.postMessage({ type: 'backConnectionIdentity' });
-    });
-    document.getElementById('btn-continue').addEventListener('click', () => {
-      const name = document.getElementById('name').value.trim();
-      const projectKey = document.getElementById('projectKey').value.trim();
-      if (!name || !projectKey) {
-        document.getElementById('error').textContent = 'Name and project key are required.';
-        document.getElementById('error').classList.remove('hidden');
-        return;
-      }
-      vscode.postMessage({ type: 'validateConnectionIdentity', name, projectKey });
-    });
-    document.getElementById('btn-save').addEventListener('click', () => {
-      const connectionId = document.getElementById('connection-id').value || undefined;
-      const clientId = document.getElementById('clientId').value.trim();
-      const clientSecret = document.getElementById('clientSecret').value.trim();
-      if (!clientId) {
-        document.getElementById('error').textContent = 'Client ID is required.';
-        document.getElementById('error').classList.remove('hidden');
-        return;
-      }
-      if (!connectionId && !clientSecret) {
-        document.getElementById('error').textContent = 'Client secret is required for new connections.';
-        document.getElementById('error').classList.remove('hidden');
-        return;
-      }
-      vscode.postMessage({
-        type: 'saveConnection',
-        connectionId: document.getElementById('connection-id').value || undefined,
-        connection: {
-          name: document.getElementById('name').value,
-          projectKey: document.getElementById('projectKey').value,
-          clientId,
-          clientSecret,
-          authUrl: document.getElementById('authUrl').value,
-          apiUrl: document.getElementById('apiUrl').value,
-        }
-      });
     });
 
     function formatConnectionStatus(next) {
@@ -727,62 +567,6 @@ export function renderStudioHtml(options: {
         '✓ Tools Loaded (' + (health.toolsLoaded || 0) + ')'
       );
       el.textContent = lines.join('\\n');
-    }
-
-    function renderConnections(connections) {
-      const list = document.getElementById('connections-list');
-      if (!connections.length) {
-        list.innerHTML = '<p class="subtitle">No connections yet.</p>';
-        return;
-      }
-      list.innerHTML = connections.map(conn => {
-        const itemClass = [
-          'conn-item',
-          conn.isActive ? 'active' : '',
-          conn.isConnected ? 'connected' : ''
-        ].filter(Boolean).join(' ');
-        const toggleAction = conn.isConnected ? 'disconnect' : 'connect';
-        const toggleLabel = conn.isConnected ? 'Disconnect' : 'Connect';
-        const toggleClass = conn.isConnected ? 'disconnect-btn' : '';
-        return \`
-        <div class="\${itemClass}" data-id="\${conn.id}">
-          <div class="conn-name">\${conn.name}\${conn.isConnected ? '<span class="conn-badge">Live</span>' : ''}</div>
-          <div class="conn-meta">\${conn.projectKey} · \${conn.hasSecret ? 'secret saved' : 'missing secret'}</div>
-          <div class="row">
-            <button data-action="select" data-id="\${conn.id}">Select</button>
-            <button class="\${toggleClass}" data-action="\${toggleAction}" data-id="\${conn.id}">\${toggleLabel}</button>
-            <button data-action="edit" data-id="\${conn.id}">Edit</button>
-            <button data-action="delete" data-id="\${conn.id}">Delete</button>
-          </div>
-        </div>
-      \`;
-      }).join('');
-
-      list.querySelectorAll('button').forEach(btn => {
-        btn.addEventListener('click', (event) => {
-          event.stopPropagation();
-          const id = btn.dataset.id;
-          const action = btn.dataset.action;
-          const conn = connections.find(item => item.id === id);
-          if (action === 'select') vscode.postMessage({ type: 'selectConnection', connectionId: id });
-          if (action === 'connect') vscode.postMessage({ type: 'connect', connectionId: id });
-          if (action === 'disconnect') vscode.postMessage({ type: 'disconnect' });
-          if (action === 'delete') vscode.postMessage({ type: 'deleteConnection', connectionId: id });
-          if (action === 'edit' && conn) {
-            editingConnection = conn;
-            document.getElementById('connection-id').value = conn.id;
-            document.getElementById('form-title').textContent = 'Edit Connection';
-            document.getElementById('name').value = conn.name;
-            document.getElementById('projectKey').value = conn.projectKey;
-            document.getElementById('clientId').value = '';
-            document.getElementById('clientSecret').value = '';
-            document.getElementById('authUrl').value = '';
-            document.getElementById('apiUrl').value = '';
-            document.getElementById('identity-summary').textContent = '';
-            setFormStep(1);
-          }
-        });
-      });
     }
 
     function renderTools(groups) {
@@ -875,21 +659,11 @@ export function renderStudioHtml(options: {
       document.getElementById('connection-status').textContent = formatConnectionStatus(next);
       document.getElementById('connection-status').className = 'status ' + (next.connected ? 'ok' : 'bad');
       renderHealth(next.health, next.activeConnection);
-      renderConnections(next.connections || []);
       renderTools(next.toolGroups || []);
       renderLogs(next.logs || []);
       renderConnectDiagnostics(next.connectDiagnostics || []);
       renderTemplates(next.templates || []);
-
-      if (typeof next.connectionFormStep === 'number') {
-        setFormStep(next.connectionFormStep);
-        if (next.connectionFormStep === 2) {
-          prepareCredentialsStep();
-        }
-        if (next.connectionFormStep === 1 && next.error === 'Connection saved.') {
-          resetConnectionForm();
-        }
-      }
+      applyWorkspaceCredentials(next.workspaceCredentials, next.connected);
 
       const errorEl = document.getElementById('error');
       if (next.error) {

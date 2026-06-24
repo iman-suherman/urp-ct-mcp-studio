@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "summary": "Commerce MCP Studio 0.1.4: website hero latest release panel and footer disclaimers.",
+  "releaseNotes": {
+    "introduced": [
+      "Hero panel showing the latest extension release on the marketing website"
+    ],
+    "changed": [
+      "Stronger commercetools footer disclaimers on the website",
+      "Refreshed website layout, navigation, and marketing sections",
+      "README split into categorized docs with an extension-focused main guide"
+    ],
+    "fixed": [
+      "Hero title overflow on narrow viewports"
+    ]
+  }
+}

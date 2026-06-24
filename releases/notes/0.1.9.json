@@ -1,0 +1,12 @@
+{
+  "version": "0.1.9",
+  "summary": "Commerce MCP Studio 0.1.9: auto-correct swapped commercetools URLs.",
+  "releaseNotes": {
+    "fixed": [
+      "Auto-correct swapped Auth and API URLs when saving a connection"
+    ],
+    "changed": [
+      "Versions page paginated with 10 releases per page"
+    ]
+  }
+}

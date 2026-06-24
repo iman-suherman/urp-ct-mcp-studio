@@ -1,10 +1,19 @@
 /**
  * Build structured release notes from git history since the previous semver tag.
+ * Curated notes in releases/notes/{version}.json override auto-generation.
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { assertSemver, parseSemver } = require("./semver.cjs");
+const { readReleaseNotes } = require("./read-release-notes.cjs");
+const {
+  isNoiseCommit,
+  toUserFacingNote,
+  categorizeUserNote,
+  uniqueItems,
+  buildSummary,
+} = require("./release-note-copy.cjs");
 
 const root = path.join(__dirname, "..");
 const shell = process.platform === "win32";
@@ -25,6 +34,36 @@ function getPreviousTag(currentVersion) {
   for (const tag of tags) {
     const tagVersion = tag.replace(/^v/, "");
     if (tagVersion !== currentVersion) return tag;
+  }
+  return null;
+}
+
+function findBumpCommitForVersion(version) {
+  const patterns = [
+    `Bump package version to ${version}`,
+    `Bump version to ${version}`,
+    `bump to ${version}`,
+    `bump version to ${version}`,
+  ];
+  for (const pattern of patterns) {
+    const hash = runGit(["log", "-1", "--format=%H", "--grep", pattern, "-i"]);
+    if (hash) return hash;
+  }
+  return null;
+}
+
+function resolvePreviousVersion(currentVersion) {
+  const parsed = parseSemver(currentVersion);
+  if (!parsed || parsed.patch === 0) return null;
+  return `${parsed.major}.${parsed.minor}.${parsed.patch - 1}`;
+}
+
+function resolveSinceCommitForVersion(version, explicitSinceCommit) {
+  if (explicitSinceCommit) return explicitSinceCommit;
+  const previousVersion = resolvePreviousVersion(version);
+  if (previousVersion) {
+    const bumpCommit = findBumpCommitForVersion(previousVersion);
+    if (bumpCommit) return bumpCommit;
   }
   return null;
 }
@@ -85,10 +124,6 @@ function categorizeCommit(subject) {
   }
 }
 
-function uniqueItems(items) {
-  return [...new Set(items.filter(Boolean))];
-}
-
 function suggestBumpLevel(commits) {
   let bump = "patch";
   for (const commit of commits) {
@@ -99,25 +134,52 @@ function suggestBumpLevel(commits) {
   return bump;
 }
 
-function buildMarkdown(version, releaseNotes, previousLabel) {
-  const lines = [`# ${version}`, ""];
+function buildReleaseNotesFromCommits(commits) {
+  const releaseNotes = {
+    introduced: [],
+    changed: [],
+    updated: [],
+    fixed: [],
+    removed: [],
+    breaking: [],
+  };
+
+  for (const commit of commits) {
+    if (isNoiseCommit(commit.subject)) continue;
+    const note = toUserFacingNote(commit.subject);
+    const category = categorizeUserNote(note, commit.subject);
+    releaseNotes[category].push(note);
+  }
+
+  for (const key of Object.keys(releaseNotes)) {
+    releaseNotes[key] = uniqueItems(releaseNotes[key]);
+  }
+
+  return releaseNotes;
+}
+
+function buildMarkdown(version, releaseNotes, previousLabel, summary) {
+  const lines = [`# Commerce MCP Studio ${version}`, ""];
+  if (summary) {
+    lines.push(summary, "");
+  }
   if (previousLabel) {
     lines.push(`Changes since \`${previousLabel}\`.`, "");
-  } else {
-    lines.push("Initial tracked release.", "");
   }
 
   const sections = [
-    ["Breaking changes", releaseNotes.breaking],
-    ["Introduced", releaseNotes.introduced],
-    ["Changed", releaseNotes.changed],
-    ["Updated", releaseNotes.updated],
-    ["Fixed", releaseNotes.fixed],
+    ["What's new", releaseNotes.introduced],
+    ["Improvements", releaseNotes.changed],
+    ["Fixes", releaseNotes.fixed],
+    ["Updates", releaseNotes.updated],
     ["Removed", releaseNotes.removed],
+    ["Breaking changes", releaseNotes.breaking],
   ];
 
+  let hasSection = false;
   for (const [title, items] of sections) {
     if (!items.length) continue;
+    hasSection = true;
     lines.push(`## ${title}`, "");
     for (const item of items) {
       lines.push(`- ${item}`);
@@ -125,8 +187,8 @@ function buildMarkdown(version, releaseNotes, previousLabel) {
     lines.push("");
   }
 
-  if (releaseNotes.summary) {
-    lines.push("## Summary", "", releaseNotes.summary, "");
+  if (!hasSection) {
+    lines.push("Maintenance and stability improvements.", "");
   }
 
   return lines.join("\n").trim() + "\n";
@@ -139,44 +201,27 @@ function generateReleaseNotes(options = {}) {
   const displayName = options.displayName || packageJson.displayName || pluginId;
 
   const parsed = assertSemver(version, "package.json version");
-  const sinceCommit = options.sinceCommit || null;
+  const curated = readReleaseNotes(root, version);
+
+  const sinceCommit =
+    options.sinceCommit ??
+    resolveSinceCommitForVersion(parsed.version, options.sinceCommit);
   const previousTag = sinceCommit ? null : options.previousTag ?? getPreviousTag(version);
+  const previousVersion = resolvePreviousVersion(parsed.version);
   const previousLabel =
-    options.previousLabel || (sinceCommit ? sinceCommit.slice(0, 7) : previousTag);
+    options.previousLabel ||
+    (previousVersion ? `v${previousVersion}` : sinceCommit ? sinceCommit.slice(0, 7) : previousTag);
+
   const range = getCommitRange(previousTag, sinceCommit);
   const commits = getCommits(range);
+  const autoNotes = buildReleaseNotesFromCommits(commits);
 
-  const releaseNotes = {
-    introduced: [],
-    changed: [],
-    updated: [],
-    fixed: [],
-    removed: [],
-    breaking: [],
-  };
-
-  for (const commit of commits) {
-    const { category, summary } = categorizeCommit(commit.subject);
-    releaseNotes[category].push(summary);
-  }
-
-  for (const key of Object.keys(releaseNotes)) {
-    releaseNotes[key] = uniqueItems(releaseNotes[key]);
-  }
-
-  const headlineParts = [];
-  if (releaseNotes.introduced.length) headlineParts.push(`${releaseNotes.introduced.length} new`);
-  if (releaseNotes.changed.length) headlineParts.push(`${releaseNotes.changed.length} changed`);
-  if (releaseNotes.fixed.length) headlineParts.push(`${releaseNotes.fixed.length} fixed`);
-
+  const releaseNotes = curated?.releaseNotes ?? autoNotes;
   const summary =
-    headlineParts.length > 0
-      ? `${displayName} ${version}: ${headlineParts.join(", ")}.`
-      : `${displayName} ${version} release.`;
-
+    curated?.summary ?? buildSummary(displayName, parsed.version, releaseNotes);
   const gitCommit = runGit(["rev-parse", "HEAD"]);
 
-  return {
+  const payload = {
     pluginId,
     displayName,
     publisher: packageJson.publisher || "",
@@ -196,9 +241,16 @@ function generateReleaseNotes(options = {}) {
     commitCount: commits.length,
     releaseNotes,
     summary,
-    releaseNotesMarkdown: buildMarkdown(parsed.version, releaseNotes, previousLabel),
+    highlights: curated?.highlights ?? [],
+    mandatory: curated?.mandatory === true,
+    curated: Boolean(curated),
+    releaseNotesMarkdown:
+      curated?.releaseNotesMarkdown ??
+      buildMarkdown(parsed.version, releaseNotes, previousLabel, summary),
     generatedAt: new Date().toISOString(),
   };
+
+  return payload;
 }
 
 function writeReleaseArtifacts(release, outputDir = path.join(root, "releases")) {
@@ -211,7 +263,8 @@ function writeReleaseArtifacts(release, outputDir = path.join(root, "releases"))
 }
 
 if (require.main === module) {
-  const release = generateReleaseNotes();
+  const versionArg = process.argv.find((arg) => /^\d+\.\d+\.\d+$/.test(arg));
+  const release = generateReleaseNotes(versionArg ? { version: versionArg } : {});
   const paths = writeReleaseArtifacts(release);
   console.log("release-notes:", paths.jsonPath);
   console.log("release-notes:", paths.mdPath);
@@ -224,4 +277,6 @@ module.exports = {
   categorizeCommit,
   suggestBumpLevel,
   getCommits,
+  resolveSinceCommitForVersion,
+  buildReleaseNotesFromCommits,
 };

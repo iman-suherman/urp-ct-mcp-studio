@@ -47,6 +47,8 @@
     "deploy:extension": "node scripts/release.cjs",
     "install-hooks": "node scripts/install-git-hooks.cjs",
     "release-notes": "node scripts/generate-release-notes.cjs",
+    "release-notes:backfill": "node scripts/backfill-release-notes.cjs",
+    "release-notes:publish": "node scripts/backfill-release-notes.cjs --register --upload",
     "deploy:registry": "node scripts/deploy-registry-api.cjs",
     "deploy:website": "node scripts/deploy-website.cjs",
     "deploy:retry": "node scripts/deploy-retry.cjs",

@@ -1,0 +1,20 @@
+{
+  "version": "0.1.2",
+  "summary": "Commerce MCP Studio 0.1.2: faster connect, website refresh, and VSIX packaging fixes.",
+  "releaseNotes": {
+    "introduced": [
+      "Self-hosted VSIX distribution with GCS, Firestore registry API, and marketing website",
+      "Automatic update checks via the CT MCP registry (Sparkle-style feed for VS Code)"
+    ],
+    "changed": [
+      "Marketing website expanded with feature showcases and VS Code install guide",
+      "Downloads routed via ct-mcp-download CDN",
+      "Tracked deploy pipeline for extension, registry API, and website"
+    ],
+    "fixed": [
+      "Faster first connect by bundling Commerce MCP with the extension",
+      "VSIX packaging, logo, and publisher branding",
+      "Deploy runner no longer skips when trigger leaves status queued"
+    ]
+  }
+}

@@ -13,11 +13,12 @@ When the user asks for commercetools data (products, carts, orders, etc.):
 
 1. **Prefer MCP tools** — use \`@commerce-mcp\` tools (e.g. product search) when they are available in chat.
 2. **If the dedicated commerce tool is not exposed**, discover an existing setup in the workspace before asking for secrets:
+   - Workspace \`.env\` (\`CTP_*\`, \`CTOOLS_*\`, \`COMM_TOOLS_*\`, \`CT_MCP_*\`, \`COMMERCETOOLS_*\`)
    - \`.env.mcp\` (\`CT_MCP_*\`, \`COMMERCETOOLS_*\`)
    - \`.cursor/mcp.json\` → \`mcpServers.commerce-mcp\`
    - \`.vscode/settings.json\` → \`mcp.servers.commerce-mcp\`
    - User MCP config: \`${USER_MCP_JSON_HINT}\` → \`servers.commerce-mcp\` args (\`--projectKey=\`, \`--clientId=\`, etc.)
-   - Shell env: \`CT_MCP_*\`, \`COMMERCETOOLS_*\`, \`PROJECT_KEY\`, \`CLIENT_ID\`, \`AUTH_URL\`, \`API_URL\`
+   - Shell env: \`CT_MCP_*\`, \`COMMERCETOOLS_*\`, \`CTP_*\`, \`CTOOLS_*\`, \`COMM_TOOLS_*\`, \`PROJECT_KEY\`, \`CLIENT_ID\`, \`AUTH_URL\`, \`API_URL\`
 3. **Never expose secrets** — do not print client secrets, access tokens, or Basic auth headers in chat or user-visible logs.
 4. **Communicate progress** — briefly state what you are checking before each step (tool availability → credential paths → API call).
 

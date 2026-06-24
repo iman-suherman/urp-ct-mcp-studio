@@ -1,0 +1,16 @@
+{
+  "version": "0.1.21",
+  "summary": "Commerce MCP Studio 0.1.21: sandbox mode and a safer connection setup flow.",
+  "releaseNotes": {
+    "introduced": [
+      "Sandbox mode blocks connections containing \"prod\" or \"qantas\" by default",
+      "Two-step connection wizard: enter project identity before credentials"
+    ],
+    "changed": [
+      "gcloud CLI commands prefer repo .env for project and account selection"
+    ],
+    "fixed": [
+      "Deploy retry correctly detects HTTP HEAD responses"
+    ]
+  }
+}

@@ -51,6 +51,7 @@ function formatLatestRelease(version, options = {}) {
     releaseNotes: flattenReleaseNotes(enriched.releaseNotes),
     releaseNotesMarkdown: enriched.releaseNotesMarkdown || null,
     releaseNotesStructured: enriched.releaseNotes || null,
+    highlights: Array.isArray(enriched.highlights) ? enriched.highlights : [],
     sizeBytes: enriched.sizeBytes ?? null,
     publishedAt: enriched.publishedAt ?? null,
   };

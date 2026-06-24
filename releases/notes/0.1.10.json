@@ -1,0 +1,12 @@
+{
+  "version": "0.1.10",
+  "summary": "Commerce MCP Studio 0.1.10: MCP Navigator and sidebar UX improvements.",
+  "releaseNotes": {
+    "introduced": [
+      "MCP Navigator panel with card-based tool browse"
+    ],
+    "changed": [
+      "Sidebar connection actions and layout improvements"
+    ]
+  }
+}

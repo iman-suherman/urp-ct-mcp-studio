@@ -1,0 +1,9 @@
+{
+  "version": "0.1.23",
+  "summary": "Commerce MCP Studio 0.1.23: maintenance release.",
+  "releaseNotes": {
+    "changed": [
+      "Internal release pipeline sync — no user-facing extension changes"
+    ]
+  }
+}

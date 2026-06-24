@@ -1,0 +1,22 @@
+{
+  "version": "0.1.22",
+  "summary": "Commerce MCP Studio 0.1.22: reliable extension publishing and sandbox-safe connections.",
+  "mandatory": false,
+  "highlights": [
+    "Sandbox mode blocks prod and Qantas projects by default",
+    "Two-step connection wizard before entering credentials",
+    "Extension uploads no longer depend on gcloud Python"
+  ],
+  "releaseNotes": {
+    "introduced": [
+      "Sandbox mode setting blocks connections containing \"prod\" or \"qantas\" until disabled in settings",
+      "Two-step connection setup: name and project key first, then credentials"
+    ],
+    "changed": [
+      "Extension publish pipeline uses the Node GCS SDK instead of gcloud storage cp"
+    ],
+    "fixed": [
+      "Release no longer bumps version when only uncommitted changes exist"
+    ]
+  }
+}

@@ -6,6 +6,8 @@ website/node_modules/
 website/.next/
 releases/*
 !releases/.gitkeep
+!releases/notes/
+!releases/notes/**
 logs/*
 !logs/.gitkeep
 
@@ -16,8 +18,9 @@ logs/*
 .gcloud/application_default_credentials.json
 
 # Cursor IDE (local only)
-.cursor/rules/
 .cursor/mcp.json
+.cursor/rules/*
+!.cursor/rules/*.mdc
 .env.mcp
 
 # VS Code (local only)

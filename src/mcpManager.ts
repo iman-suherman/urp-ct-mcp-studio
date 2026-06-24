@@ -6,6 +6,10 @@ import { McpProcessManager } from "./mcpProcessManager";
 import { syncNativeMcpConfig } from "./nativeMcpBridge";
 import { initProjectMcpContext, ProjectMcpInitResult } from "./projectMcpInit";
 import {
+  findActiveWorkspaceCredentials,
+  WorkspaceCredentials,
+} from "./workspaceEnvCredentials";
+import {
   GLOBAL_CACHED_TOOLS_KEY,
   GLOBAL_CONNECTION_STATUS_KEY,
 } from "./secrets";
@@ -82,14 +86,88 @@ export class CommerceMcpManager {
   async saveConnection(input: MCPConnectionInput, existingId?: string): Promise<MCPConnection> {
     await this.validateConnectionIdentity(input);
 
-    if (!input.clientId.trim()) {
-      throw new Error("Client ID is required.");
+    const workspace = findActiveWorkspaceCredentials();
+    const clientId = input.clientId.trim() || workspace?.clientId || "";
+    if (!clientId) {
+      throw new Error(
+        "Client ID is required. Add commercetools credentials to the workspace .env file."
+      );
     }
 
-    const connection = await this.store.saveConnection(input, existingId);
+    const connection = await this.store.saveConnection(
+      {
+        ...input,
+        clientId,
+        authUrl: input.authUrl.trim() || workspace?.authUrl || "",
+        apiUrl: input.apiUrl.trim() || workspace?.apiUrl || "",
+        isAdmin: input.isAdmin ?? workspace?.isAdmin ?? true,
+      },
+      existingId
+    );
     this.logs.info(`Saved connection "${connection.name}".`);
     this.notifyChanged();
     return connection;
+  }
+
+  getWorkspaceCredentials(): WorkspaceCredentials | undefined {
+    return findActiveWorkspaceCredentials();
+  }
+
+  async ensureWorkspaceConnection(): Promise<MCPConnection | undefined> {
+    const workspace = findActiveWorkspaceCredentials();
+    if (!workspace) {
+      return undefined;
+    }
+
+    const connections = await this.store.listConnections();
+    const existing = connections.find(
+      (item) =>
+        item.projectKey === workspace.projectKey &&
+        item.clientId === workspace.clientId
+    );
+
+    const connection = await this.store.saveConnection(
+      {
+        name: workspace.name,
+        projectKey: workspace.projectKey,
+        clientId: workspace.clientId,
+        clientSecret: "",
+        authUrl: workspace.authUrl,
+        apiUrl: workspace.apiUrl,
+        enabledTools: ["all"],
+        isAdmin: workspace.isAdmin,
+      },
+      existing?.id
+    );
+
+    await this.store.setActiveConnection(connection.id);
+    this.logs.info(
+      `Using commercetools credentials from ${workspace.source} (${workspace.projectKey}).`
+    );
+    this.notifyChanged();
+    return connection;
+  }
+
+  async resolveClientSecret(connection: MCPConnection): Promise<string | undefined> {
+    const stored = await this.store.getClientSecret(connection.id);
+    if (stored?.trim()) {
+      return stored.trim();
+    }
+
+    const workspace = findActiveWorkspaceCredentials();
+    if (
+      workspace &&
+      workspace.projectKey === connection.projectKey &&
+      workspace.clientId === connection.clientId
+    ) {
+      return workspace.clientSecret;
+    }
+
+    return undefined;
+  }
+
+  async hasResolvableSecret(connection: MCPConnection): Promise<boolean> {
+    return Boolean(await this.resolveClientSecret(connection));
   }
 
   async selectConnection(id: string): Promise<void> {
@@ -122,9 +200,15 @@ export class CommerceMcpManager {
     options: { openExplorer?: boolean } = {}
   ): Promise<ConnectionTestResult> {
     const config = resolveStudioConfig();
-    const targetId = connectionId ?? (await this.store.getActiveConnectionId());
+    let targetId = connectionId ?? (await this.store.getActiveConnectionId());
     if (!targetId) {
-      throw new Error("Select or create a connection first.");
+      const imported = await this.ensureWorkspaceConnection();
+      targetId = imported?.id;
+    }
+    if (!targetId) {
+      throw new Error(
+        "No commercetools credentials found. Add CTP_* or CTOOLS_* variables to the workspace .env file."
+      );
     }
 
     const connection = await this.store.getConnection(targetId);
@@ -138,9 +222,11 @@ export class CommerceMcpManager {
       throw new Error(blockReason);
     }
 
-    const clientSecret = await this.store.getClientSecret(connection.id);
+    const clientSecret = await this.resolveClientSecret(connection);
     if (!clientSecret) {
-      throw new Error("Client secret is missing for this connection.");
+      throw new Error(
+        "Commercetools credentials not found. Add CTP_* or CTOOLS_* variables to the workspace .env file."
+      );
     }
 
     return vscode.window.withProgress(
@@ -288,9 +374,12 @@ export class CommerceMcpManager {
   }
 
   async initProjectMcpContext(extensionPath: string): Promise<ProjectMcpInitResult> {
-    const connection = await this.getActiveConnection();
+    let connection = await this.getActiveConnection();
     if (!connection) {
-      throw new Error("Select a saved connection first.");
+      connection = await this.ensureWorkspaceConnection();
+    }
+    if (!connection) {
+      throw new Error("No commercetools credentials found in workspace .env files.");
     }
 
     const blockReason = getSandboxBlockReason(connection);
@@ -299,9 +388,11 @@ export class CommerceMcpManager {
       throw new Error(blockReason);
     }
 
-    const clientSecret = await this.store.getClientSecret(connection.id);
+    const clientSecret = await this.resolveClientSecret(connection);
     if (!clientSecret) {
-      throw new Error("Client secret is missing for the active connection.");
+      throw new Error(
+        "Commercetools credentials not found in the workspace .env for the active connection."
+      );
     }
 
     const result = await initProjectMcpContext(extensionPath, connection, clientSecret);
@@ -360,7 +451,10 @@ export async function maybeAutoConnect(context: vscode.ExtensionContext): Promis
   }
 
   const manager = getCommerceMcpManager(context);
-  const active = await manager.getActiveConnection();
+  let active = await manager.getActiveConnection();
+  if (!active) {
+    active = await manager.ensureWorkspaceConnection();
+  }
   if (!active || (await manager.isConnected())) {
     return;
   }

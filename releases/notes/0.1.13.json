@@ -1,0 +1,9 @@
+{
+  "version": "0.1.13",
+  "summary": "Commerce MCP Studio 0.1.13: Commerce MCP agent playbook for chat context.",
+  "releaseNotes": {
+    "introduced": [
+      "Agent playbook for Commerce MCP chat context and copy prompts"
+    ]
+  }
+}

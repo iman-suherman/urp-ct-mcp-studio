@@ -73,6 +73,8 @@ async function registerPluginVersion({
     summary: release.summary,
     releaseNotes: release.releaseNotes,
     releaseNotesMarkdown: release.releaseNotesMarkdown,
+    highlights: release.highlights ?? [],
+    mandatory: release.mandatory === true,
     gcs: {
       bucket,
       objectPath,

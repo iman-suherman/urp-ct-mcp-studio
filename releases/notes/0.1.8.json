@@ -1,0 +1,12 @@
+{
+  "version": "0.1.8",
+  "summary": "Commerce MCP Studio 0.1.8: connection diagnostics and richer connect logging.",
+  "releaseNotes": {
+    "introduced": [
+      "Connection diagnostics panel showing latest connect steps in the Connections tab"
+    ],
+    "changed": [
+      "Richer connect progress logging in the Commerce MCP log panel"
+    ]
+  }
+}

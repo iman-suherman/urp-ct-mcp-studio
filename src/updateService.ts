@@ -174,20 +174,55 @@ export class UpdateService implements vscode.Disposable {
   }
 
   private async maybeNotify(release: LatestRelease): Promise<void> {
+    if (release.mandatory) {
+      await this.promptMandatoryUpdate(release);
+      return;
+    }
+
     const dismissed = this.context.globalState.get<string>(DISMISSED_VERSION_KEY);
     if (dismissed === release.version) return;
 
-    const notesPreview =
-      release.releaseNotes?.slice(0, 3).map((item) => `• ${item}`).join("\n") ??
-      release.summary ??
-      "";
+    await this.promptOptionalUpdate(release);
+  }
 
-    const choice = await vscode.window.showInformationMessage(
-      notesPreview
-        ? `Commerce MCP Studio ${release.version} is available.\n${notesPreview}`
-        : `Commerce MCP Studio ${release.version} is available.`,
+  private buildUpdateMessage(release: LatestRelease): string {
+    const headline = release.summary ?? `Commerce MCP Studio ${release.version} is available.`;
+    const bullets =
+      release.highlights?.slice(0, 3) ??
+      release.releaseNotes?.slice(0, 3) ??
+      [];
+    if (!bullets.length) return headline;
+    return `${headline}\n${bullets.map((item) => `• ${item}`).join("\n")}`;
+  }
+
+  private async promptMandatoryUpdate(release: LatestRelease): Promise<void> {
+    const choice = await vscode.window.showWarningMessage(
+      this.buildUpdateMessage(release),
+      { modal: true },
       "Update Now",
       "View Release Notes",
+      "View on Website"
+    );
+
+    if (choice === "Update Now") {
+      await this.downloadAndInstallUpdate();
+      return;
+    }
+    if (choice === "View Release Notes") {
+      await vscode.commands.executeCommand("ctMcp.openReleaseNotes", release.version);
+      return;
+    }
+    if (choice === "View on Website" && release.releaseNotesUrl) {
+      await vscode.env.openExternal(vscode.Uri.parse(release.releaseNotesUrl));
+    }
+  }
+
+  private async promptOptionalUpdate(release: LatestRelease): Promise<void> {
+    const choice = await vscode.window.showInformationMessage(
+      this.buildUpdateMessage(release),
+      "Update Now",
+      "View Release Notes",
+      "View on Website",
       "Remind Me Later"
     );
 
@@ -197,6 +232,10 @@ export class UpdateService implements vscode.Disposable {
     }
     if (choice === "View Release Notes") {
       await vscode.commands.executeCommand("ctMcp.openReleaseNotes", release.version);
+      return;
+    }
+    if (choice === "View on Website" && release.releaseNotesUrl) {
+      await vscode.env.openExternal(vscode.Uri.parse(release.releaseNotesUrl));
       return;
     }
     if (choice === "Remind Me Later") {

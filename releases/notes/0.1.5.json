@@ -1,0 +1,13 @@
+{
+  "version": "0.1.5",
+  "summary": "Commerce MCP Studio 0.1.5: Explorer auto-open, native MCP spawn fix, and website icon.",
+  "releaseNotes": {
+    "changed": [
+      "Explorer panel opens automatically after a successful connection (configurable)",
+      "Native MCP config spawns Commerce MCP reliably in VS Code Chat"
+    ],
+    "fixed": [
+      "Website and extension use the SVG Commerce MCP icon"
+    ]
+  }
+}
