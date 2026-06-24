@@ -145,10 +145,16 @@ async function main() {
   const commitsSinceLast = getCommitsSince(lastCommit);
   const dirty = hasWorkingTreeChanges();
 
-  if (lastCommit && headCommit === lastCommit && commitsSinceLast.length === 0 && !dirty) {
-    console.log(
-      `release: skip — no code changes since last release (${lastCommit.slice(0, 7)}, v${releaseState.lastReleasedVersion || "?"})`
-    );
+  if (lastCommit && headCommit === lastCommit && commitsSinceLast.length === 0) {
+    if (dirty) {
+      console.log(
+        `release: skip — no new commits since last release (${lastCommit.slice(0, 7)}, v${releaseState.lastReleasedVersion || "?"}); commit changes first`
+      );
+    } else {
+      console.log(
+        `release: skip — no code changes since last release (${lastCommit.slice(0, 7)}, v${releaseState.lastReleasedVersion || "?"})`
+      );
+    }
     try {
       await markReleaseCheckpoint(
         pluginId,

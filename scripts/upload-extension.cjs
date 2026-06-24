@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
 const { applyGcpEnv } = require("./apply-gcp-env.cjs");
+const { ensureBucket, uploadObject } = require("./gcs-storage.cjs");
 const { assertSemver } = require("./semver.cjs");
 const { generateReleaseNotes, writeReleaseArtifacts } = require("./generate-release-notes.cjs");
 const { registerPluginVersion } = require("./register-version.cjs");
@@ -73,44 +74,6 @@ function resolveVsixPath(packageJson, version) {
   return vsixPath;
 }
 
-function bucketExists(bucket, projectId) {
-  const r = spawnSync(
-    "gcloud",
-    [
-      "storage",
-      "buckets",
-      "describe",
-      `gs://${bucket}`,
-      "--project",
-      projectId,
-      "--format=value(name)",
-    ],
-    { cwd: root, shell, env: gcpEnv, encoding: "utf8" }
-  );
-  return r.status === 0;
-}
-
-function ensureBucket(bucket, projectId, location) {
-  if (bucketExists(bucket, projectId)) {
-    console.log(`upload: using bucket gs://${bucket}`);
-    return;
-  }
-
-  console.log(`upload: creating bucket gs://${bucket} (${location})…`);
-  run("gcloud", [
-    "storage",
-    "buckets",
-    "create",
-    `gs://${bucket}`,
-    "--project",
-    projectId,
-    "--location",
-    location,
-    "--uniform-bucket-level-access",
-  ]);
-  console.log(`upload: created bucket gs://${bucket}`);
-}
-
 async function uploadExtension(options = {}) {
   ensureGcpEnv();
 
@@ -149,39 +112,12 @@ async function uploadExtension(options = {}) {
     ? `${prefix}/release-${version}.md`
     : `release-${version}.md`;
 
-  ensureBucket(bucket, projectId, resolveLocation());
+  await ensureBucket(bucket, projectId, resolveLocation());
 
-  console.log(`upload: uploading ${vsixName} → gs://${bucket}/${objectPath}`);
-  run("gcloud", ["storage", "cp", vsixPath, `gs://${bucket}/${objectPath}`, "--project", projectId]);
-
-  console.log(`upload: uploading latest copy → gs://${bucket}/${latestObjectPath}`);
-  run("gcloud", [
-    "storage",
-    "cp",
-    vsixPath,
-    `gs://${bucket}/${latestObjectPath}`,
-    "--project",
-    projectId,
-  ]);
-
-  console.log(`upload: uploading release notes → gs://${bucket}/${releaseNotesObjectPath}`);
-  run("gcloud", [
-    "storage",
-    "cp",
-    artifacts.jsonPath,
-    `gs://${bucket}/${releaseNotesObjectPath}`,
-    "--project",
-    projectId,
-  ]);
-
-  run("gcloud", [
-    "storage",
-    "cp",
-    artifacts.mdPath,
-    `gs://${bucket}/${releaseNotesMarkdownPath}`,
-    "--project",
-    projectId,
-  ]);
+  await uploadObject(bucket, vsixPath, objectPath, { projectId });
+  await uploadObject(bucket, vsixPath, latestObjectPath, { projectId });
+  await uploadObject(bucket, artifacts.jsonPath, releaseNotesObjectPath, { projectId });
+  await uploadObject(bucket, artifacts.mdPath, releaseNotesMarkdownPath, { projectId });
 
   const sizeBytes = fs.statSync(vsixPath).size;
   const registration = await registerPluginVersion({
