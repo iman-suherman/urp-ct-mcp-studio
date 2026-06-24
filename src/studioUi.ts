@@ -610,6 +610,37 @@ export function renderStudioHtml(options: {
       user-select: none;
     }
     .connection-pref input { width: auto; margin: 0; }
+    .connection-env-hint {
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      background: var(--vscode-editor-background);
+    }
+    .connection-env-hint-title {
+      font-size: 11px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    .connection-env-hint-desc {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      margin: 0 0 8px;
+      line-height: 1.45;
+    }
+    .connection-env-example {
+      margin: 0;
+      padding: 8px;
+      border-radius: 6px;
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 10px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: rgba(128,128,128,.08);
+      color: var(--vscode-foreground);
+      overflow-x: auto;
+    }
     .connection-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
     button.primary {
       background: var(--vscode-button-background);
@@ -739,6 +770,24 @@ export function renderStudioHtml(options: {
         <div id="connection-banner-title" class="connection-banner-title">Not connected</div>
         <div id="connection-banner-subtitle" class="connection-banner-subtitle">Scanning workspace credentials…</div>
       </div>
+    </div>
+
+    <div id="connection-env-hint" class="connection-env-hint hidden">
+      <p class="connection-env-hint-title">Example workspace <code>.env</code></p>
+      <p class="connection-env-hint-desc">
+        Create <code>.env</code> in your project root. You can also use
+        <code>.env.local</code>, <code>.env.mcp</code>, or split values across multiple files.
+        Supported prefixes: <code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>.
+      </p>
+      <pre class="connection-env-example"># .env
+CTP_PROJECT_KEY=my-project-key
+CTP_CLIENT_ID=your-client-id
+CTP_CLIENT_SECRET=your-client-secret
+CTP_AUTH_URL=https://auth.europe-west1.gcp.commercetools.com
+CTP_API_URL=https://api.europe-west1.gcp.commercetools.com
+
+# Optional
+CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
     </div>
 
     <div id="connection-details" class="connection-details hidden">
@@ -1034,6 +1083,7 @@ export function renderStudioHtml(options: {
       const disconnectBtn = document.getElementById('btn-disconnect');
       const refreshBtn = document.getElementById('btn-refresh');
       const autoConnectEl = document.getElementById('autoConnect');
+      const envHint = document.getElementById('connection-env-hint');
 
       const profile = resolveConnectionProfile(next);
       const canConnect = next.hasWorkspaceEnvFiles && next.workspaceCredentials;
@@ -1065,7 +1115,12 @@ export function renderStudioHtml(options: {
       } else {
         banner.classList.add('disconnected');
         title.textContent = 'No .env files';
-        subtitle.textContent = 'Add a workspace .env file with commercetools credentials to connect';
+        subtitle.textContent = 'Create a workspace .env file with commercetools credentials (see example below)';
+      }
+
+      if (envHint) {
+        const showEnvHint = !next.hasWorkspaceEnvFiles && !connected && !busy;
+        envHint.classList.toggle('hidden', !showEnvHint);
       }
 
       if (profile) {
