@@ -1,0 +1,41 @@
+---
+description: Git commit author identity — Iman Suherman only, no Cursor co-author
+alwaysApply: true
+---
+
+# Git commit identity
+
+All commits in this repository must be authored and committed as:
+
+- **Name:** Iman Suherman
+- **Email:** iman.suherman@gmail.com
+
+## When creating commits
+
+1. Never add `Co-authored-by: Cursor <cursoragent@cursor.com>` or any Cursor agent co-author trailer.
+2. Never commit as `suherman@qantas.com.au` or any other email.
+3. If Cursor tries to append a Co-authored-by trailer, remove it before committing.
+
+## Agent workflow
+
+When the user asks you to commit:
+
+- Use author identity `Iman Suherman <iman.suherman@gmail.com>` only.
+- Do not pass `--author` with a different email.
+- Do not include Co-authored-by lines in commit messages.
+- Do not use `--no-verify` to bypass hooks unless the user explicitly requests it.
+
+## Hooks
+
+Run `npm run install-hooks` after clone to install:
+
+- **pre-commit** — rejects commits when `git config user.email` or `user.name` is wrong.
+- **commit-msg** — rejects commit messages containing Cursor co-author trailers.
+- **post-commit** — amends identity drift and strips stray Cursor co-author lines as a fallback.
+
+## Local git config
+
+```bash
+git config user.name "Iman Suherman"
+git config user.email "iman.suherman@gmail.com"
+```

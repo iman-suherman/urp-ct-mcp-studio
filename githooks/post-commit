@@ -5,10 +5,13 @@ repo_root=$(git rev-parse --show-toplevel)
 
 author_email=$(git log -1 --format="%ae")
 committer_email=$(git log -1 --format="%ce")
-if [ "$author_email" != "iman.suherman@gmail.com" ] || [ "$committer_email" != "iman.suherman@gmail.com" ]; then
+has_cursor_coauthor=$(git log -1 --format='%B' | grep -cE '^Co-authored-by:.*[Cc]ursor' || true)
+
+if [ "$author_email" != "iman.suherman@gmail.com" ] || [ "$committer_email" != "iman.suherman@gmail.com" ] || [ "$has_cursor_coauthor" -gt 0 ]; then
   export GIT_COMMITTER_NAME="Iman Suherman"
   export GIT_COMMITTER_EMAIL="iman.suherman@gmail.com"
-  git commit --amend --author="Iman Suherman <iman.suherman@gmail.com>" --no-edit --no-verify
+  msg=$(git log -1 --format='%B' | grep -vE '^Co-authored-by:.*[Cc]ursor' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+  git commit --amend --author="Iman Suherman <iman.suherman@gmail.com>" -m "$msg" --no-verify
   exit 0
 fi
 

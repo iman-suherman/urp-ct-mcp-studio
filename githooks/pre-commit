@@ -1,0 +1,16 @@
+#!/bin/bash
+# Block commits when git user identity is not the project author.
+
+expected_name="Iman Suherman"
+expected_email="iman.suherman@gmail.com"
+
+name=$(git config user.name 2>/dev/null || true)
+email=$(git config user.email 2>/dev/null || true)
+
+if [ "$name" != "$expected_name" ] || [ "$email" != "$expected_email" ]; then
+  echo "pre-commit: git user must be \"$expected_name <$expected_email>\" (got \"${name:-<unset>} <${email:-<unset}>\")." >&2
+  echo "pre-commit: run: git config user.name \"$expected_name\" && git config user.email \"$expected_email\"" >&2
+  exit 1
+fi
+
+exit 0

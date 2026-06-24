@@ -1,0 +1,12 @@
+#!/bin/bash
+# Reject commit messages that include Cursor co-author trailers.
+
+msg_file="$1"
+
+if grep -qE '^Co-authored-by:.*[Cc]ursor' "$msg_file"; then
+  echo "commit-msg: remove Cursor co-author trailers before committing." >&2
+  echo "commit-msg: this repo commits as Iman Suherman <iman.suherman@gmail.com> only." >&2
+  exit 1
+fi
+
+exit 0
