@@ -1,0 +1,77 @@
+---
+description: Write user-facing Commerce MCP Studio release notes (Sparkle-style structured updates)
+globs: releases/notes/**/*.json,scripts/generate-release-notes.cjs,scripts/read-release-notes.cjs,scripts/release-note-copy.cjs,scripts/backfill-release-notes.cjs
+alwaysApply: false
+---
+
+# Release notes (Commerce MCP Studio)
+
+Write release notes for **end users** of the VS Code extension, not developers reading git history.
+
+## Where notes live
+
+- **Curated source of truth:** `releases/notes/{version}.json` (committed to git)
+- **Generated artifacts:** `releases/release-{version}.json` and `.md` (gitignored, produced on publish)
+- Auto-update UI reads notes from Firestore via the registry API (Sparkle-style summary + bullets)
+
+## Curated file format
+
+```json
+{
+  "version": "0.1.22",
+  "summary": "One sentence: what matters to users in this release.",
+  "mandatory": false,
+  "highlights": [
+    "Top 1–3 bullets shown in the update notification"
+  ],
+  "releaseNotes": {
+    "introduced": ["New user-visible capability"],
+    "changed": ["Improvement to existing behavior"],
+    "fixed": ["Bug fix users would notice"],
+    "updated": ["Internal/tooling only — omit if empty"],
+    "removed": [],
+    "breaking": []
+  }
+}
+```
+
+## Writing rules
+
+1. **User-first language** — describe what changed for someone using Commerce MCP Studio, not commit subjects.
+2. **Never include** version bump commits, lockfile syncs, CI-only changes, or deploy plumbing unless users are affected.
+3. **Summary** — one clear sentence; name the headline benefit(s). Shown in update notifications (like Sparkle release titles).
+4. **Highlights** — max 3 short bullets for the update dialog; pick the most important items from `introduced` + `fixed`.
+5. **Sections** — use `introduced` for new features, `changed` for improvements, `fixed` for bugs. Leave empty arrays out of prose.
+6. **mandatory** — set `true` only when users must update (security fix, broken connect flow). Default `false`.
+7. **Patch releases** with no user-facing delta — use `"maintenance release"` summary and one `changed` bullet max.
+
+## Workflow
+
+1. Edit `releases/notes/{version}.json` before `npm run release`.
+2. Preview: `npm run release-notes` or `node scripts/generate-release-notes.cjs 0.1.22`
+3. Backfill all curated notes locally: `npm run release-notes:backfill`
+4. Push rewritten notes to GCS + Firestore: `npm run release-notes:publish` (after `npm run login`)
+
+## Good vs bad
+
+```json
+// ❌ BAD — raw commit message
+"changed": ["Bump package version to 0.1.21."]
+
+// ✅ GOOD — user-facing
+"introduced": [
+  "Sandbox mode blocks connections containing \"prod\" or \"qantas\" by default"
+]
+```
+
+```json
+// ❌ BAD — vague
+"summary": "Commerce MCP Studio 0.1.22: 47 changed."
+
+// ✅ GOOD — specific
+"summary": "Commerce MCP Studio 0.1.22: sandbox-safe connections and reliable extension publishing."
+```
+
+## Auto-generation fallback
+
+If no curated file exists, `scripts/generate-release-notes.cjs` derives notes from git commits since the previous version bump, filters noise, and rewrites subjects. **Prefer curated files** for every published version.
