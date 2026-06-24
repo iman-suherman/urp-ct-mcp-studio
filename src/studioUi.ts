@@ -64,6 +64,7 @@ export interface StudioPanelState {
   };
   hasWorkspaceEnvFiles: boolean;
   workspaceEnvSources: string[];
+  selectedWorkspaceEnvFile?: string;
   autoConnectOnStartup: boolean;
   currentVersion: string;
   latestVersion?: string;
@@ -81,6 +82,7 @@ export type StudioWebviewMessage =
   | { type: "ready" }
   | { type: "switchTab"; tab: StudioPanelState["activeTab"] }
   | { type: "connectFromWorkspace" }
+  | { type: "selectWorkspaceEnv"; envFile: string }
   | { type: "disconnect" }
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
@@ -203,6 +205,7 @@ export class StudioUiController {
         : undefined,
       hasWorkspaceEnvFiles: workspaceEnvSources.length > 0,
       workspaceEnvSources,
+      selectedWorkspaceEnvFile: this.manager.getSelectedWorkspaceEnvFile(),
       autoConnectOnStartup: resolveStudioConfig().autoConnectOnStartup,
       currentVersion: update.currentVersion,
       latestVersion: update.latestVersion,
@@ -247,6 +250,11 @@ export class StudioUiController {
           const text = err instanceof Error ? err.message : String(err);
           await this.pushState(text);
         }
+        break;
+
+      case "selectWorkspaceEnv":
+        await this.manager.setSelectedWorkspaceEnvFile(message.envFile);
+        await this.pushState(`Using ${message.envFile} for workspace credentials.`);
         break;
 
       case "disconnect":
@@ -648,6 +656,25 @@ export function renderStudioHtml(options: {
       user-select: none;
     }
     .connection-pref input { width: auto; margin: 0; }
+    .connection-env-picker {
+      margin: 10px 0 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .connection-env-picker label {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .connection-env-picker select {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(128,128,128,.25);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+    }
     .connection-env-hint {
       border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
       border-radius: 8px;
@@ -836,11 +863,17 @@ export function renderStudioHtml(options: {
       </div>
     </div>
 
+    <div id="connection-env-picker" class="connection-env-picker hidden">
+      <label for="workspace-env-select">Env file</label>
+      <select id="workspace-env-select" aria-label="Workspace env file"></select>
+    </div>
+
     <div id="connection-env-hint" class="connection-env-hint hidden">
       <p class="connection-env-hint-title">Example workspace <code>.env</code></p>
       <p class="connection-env-hint-desc">
         Create <code>.env</code> in your project root. You can also use
-        <code>.env.local</code>, <code>.env.mcp</code>, or split values across multiple files.
+        <code>.env.local</code>, <code>.env.dev</code>, <code>.env.sit</code>, <code>.env.stg</code>, or <code>.env.mcp</code>.
+        When multiple files exist, pick which one to connect with below.
         Supported prefixes: <code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>.
       </p>
       <pre class="connection-env-example"># .env
@@ -891,7 +924,7 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       <button id="btn-navigator">Navigate</button>
       <button id="btn-explorer">Explorer</button>
     </div>
-    <p class="subtitle" style="margin-top:6px;">Credentials are read from workspace <code>.env</code> (<code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>).</p>
+    <p class="subtitle" style="margin-top:6px;">Credentials are read from the selected workspace <code>.env</code> file (<code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>).</p>
     <div class="subtitle" style="margin-top:8px;">Connection diagnostics (latest)</div>
     <div id="connect-diagnostics" class="diag-list"></div>
   </section>
@@ -1093,6 +1126,12 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       const target = event.target;
       vscode.postMessage({ type: 'toggleAutoConnect', enabled: target.checked });
     });
+    document.getElementById('workspace-env-select').addEventListener('change', (event) => {
+      const target = event.target;
+      if (target.value) {
+        vscode.postMessage({ type: 'selectWorkspaceEnv', envFile: target.value });
+      }
+    });
 
     function escapeHtml(value) {
       return String(value || '')
@@ -1159,6 +1198,24 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       }).join('');
     }
 
+    function renderWorkspaceEnvPicker(next) {
+      const picker = document.getElementById('connection-env-picker');
+      const selectEl = document.getElementById('workspace-env-select');
+      const files = next.workspaceEnvSources || [];
+      if (!files.length) {
+        picker.classList.add('hidden');
+        selectEl.innerHTML = '';
+        return;
+      }
+
+      picker.classList.remove('hidden');
+      const selected = next.selectedWorkspaceEnvFile || files[0];
+      selectEl.innerHTML = files.map(function (file) {
+        const label = file === '.env' ? '.env (default)' : file;
+        return '<option value="' + escapeHtml(file) + '"' + (file === selected ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+      }).join('');
+    }
+
     function renderConnectionPanel(next) {
       const banner = document.getElementById('connection-banner');
       const title = document.getElementById('connection-banner-title');
@@ -1172,6 +1229,8 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       const autoConnectEl = document.getElementById('autoConnect');
       const envHint = document.getElementById('connection-env-hint');
       const copilotHint = document.getElementById('connection-copilot-hint');
+
+      renderWorkspaceEnvPicker(next);
 
       const profile = resolveConnectionProfile(next);
       const canConnect = next.hasWorkspaceEnvFiles && next.workspaceCredentials;
@@ -1194,7 +1253,8 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       } else if (profile) {
         banner.classList.add('ready');
         title.textContent = 'Ready to connect';
-        subtitle.textContent = 'Click Connect to start ' + profile.name + ' (' + profile.projectKey + ')';
+        subtitle.textContent = 'Using ' + (next.selectedWorkspaceEnvFile || next.workspaceCredentials?.source || 'workspace .env') +
+          ' · click Connect to start ' + profile.name + ' (' + profile.projectKey + ')';
       } else if (next.hasWorkspaceEnvFiles) {
         banner.classList.add('disconnected');
         title.textContent = 'Incomplete credentials';

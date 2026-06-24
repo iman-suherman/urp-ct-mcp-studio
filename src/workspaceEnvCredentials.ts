@@ -20,6 +20,8 @@ function normalizeCommercetoolsUrls(
   return { authUrl: trimmedAuth, apiUrl: trimmedApi };
 }
 
+export const WORKSPACE_ENV_SELECTED_KEY = "ctMcp.selectedWorkspaceEnvFile";
+
 export interface WorkspaceCredentials {
   workspaceFolder: string;
   source: string;
@@ -152,6 +154,14 @@ function resolveClientCredentials(
   return { clientId, clientSecret, isAdmin };
 }
 
+export function connectionNameFromEnvFile(envFile: string): string {
+  if (envFile === ".env") {
+    return "Workspace";
+  }
+  const suffix = envFile.replace(/^\.env\.?/, "");
+  return suffix ? `Workspace ${suffix.toUpperCase()}` : "Workspace";
+}
+
 export function resolveCredentialsFromEnv(
   env: Record<string, string>,
   options: { workspaceFolder?: string; source?: string } = {}
@@ -188,6 +198,7 @@ export function resolveCredentialsFromEnv(
 
   const name =
     firstDefined(env, ["CT_MCP_CONNECTION_NAME"]) ??
+    (options.source ? connectionNameFromEnvFile(options.source) : undefined) ??
     options.workspaceFolder ??
     projectKey;
 
@@ -252,10 +263,60 @@ export function listWorkspaceEnvFileNames(workspaceRoot: string): string[] {
   return listWorkspaceEnvFiles(workspaceRoot).map((filePath) => path.basename(filePath));
 }
 
-export function findWorkspaceCredentials(
+export function getSelectedWorkspaceEnvFile(
+  context: import("vscode").ExtensionContext,
+  workspaceRoot: string
+): string | undefined {
+  const files = listWorkspaceEnvFileNames(workspaceRoot);
+  if (!files.length) {
+    return undefined;
+  }
+
+  const saved = context.workspaceState.get<string>(WORKSPACE_ENV_SELECTED_KEY);
+  if (saved && files.includes(saved)) {
+    return saved;
+  }
+
+  return files[0];
+}
+
+export async function setSelectedWorkspaceEnvFile(
+  context: import("vscode").ExtensionContext,
+  envFile: string
+): Promise<void> {
+  await context.workspaceState.update(WORKSPACE_ENV_SELECTED_KEY, envFile);
+}
+
+export function findWorkspaceCredentialsFromFile(
   workspaceRoot: string,
+  envFileName: string,
   workspaceFolderName?: string
 ): WorkspaceCredentials | undefined {
+  const filePath = path.join(workspaceRoot, envFileName);
+  if (!fs.existsSync(filePath)) {
+    return undefined;
+  }
+
+  const env = parseEnvFile(filePath);
+  if (Object.keys(env).length === 0) {
+    return undefined;
+  }
+
+  return resolveCredentialsFromEnv(env, {
+    workspaceFolder: workspaceFolderName,
+    source: envFileName,
+  });
+}
+
+export function findWorkspaceCredentials(
+  workspaceRoot: string,
+  workspaceFolderName?: string,
+  envFileName?: string
+): WorkspaceCredentials | undefined {
+  if (envFileName) {
+    return findWorkspaceCredentialsFromFile(workspaceRoot, envFileName, workspaceFolderName);
+  }
+
   const envFiles = listWorkspaceEnvFiles(workspaceRoot);
   if (envFiles.length === 0) {
     return undefined;
@@ -291,7 +352,9 @@ export function findActiveWorkspaceEnvFiles(): string[] {
   return [];
 }
 
-export function findActiveWorkspaceCredentials(): WorkspaceCredentials | undefined {
+export function findActiveWorkspaceCredentials(
+  context?: import("vscode").ExtensionContext
+): WorkspaceCredentials | undefined {
   // Lazy import keeps this module testable outside VS Code.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const vscode = require("vscode") as typeof import("vscode");
@@ -301,7 +364,16 @@ export function findActiveWorkspaceCredentials(): WorkspaceCredentials | undefin
   }
 
   for (const folder of folders) {
-    const credentials = findWorkspaceCredentials(folder.uri.fsPath, folder.name);
+    const workspaceRoot = folder.uri.fsPath;
+    const selectedEnvFile = context
+      ? getSelectedWorkspaceEnvFile(context, workspaceRoot)
+      : listWorkspaceEnvFileNames(workspaceRoot)[0];
+
+    const credentials = findWorkspaceCredentials(
+      workspaceRoot,
+      folder.name,
+      selectedEnvFile
+    );
     if (credentials) {
       return credentials;
     }

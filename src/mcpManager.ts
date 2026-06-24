@@ -8,6 +8,8 @@ import { initProjectMcpContext, ProjectMcpInitResult } from "./projectMcpInit";
 import {
   findActiveWorkspaceCredentials,
   findActiveWorkspaceEnvFiles,
+  getSelectedWorkspaceEnvFile,
+  setSelectedWorkspaceEnvFile,
   WorkspaceCredentials,
 } from "./workspaceEnvCredentials";
 import {
@@ -80,7 +82,7 @@ export class CommerceMcpManager {
   async saveConnection(input: MCPConnectionInput, existingId?: string): Promise<MCPConnection> {
     await this.validateConnectionIdentity(input);
 
-    const workspace = findActiveWorkspaceCredentials();
+    const workspace = findActiveWorkspaceCredentials(this.context);
     const clientId = input.clientId.trim() || workspace?.clientId || "";
     if (!clientId) {
       throw new Error(
@@ -104,15 +106,28 @@ export class CommerceMcpManager {
   }
 
   getWorkspaceCredentials(): WorkspaceCredentials | undefined {
-    return findActiveWorkspaceCredentials();
+    return findActiveWorkspaceCredentials(this.context);
   }
 
   getWorkspaceEnvFiles(): string[] {
     return findActiveWorkspaceEnvFiles();
   }
 
+  getSelectedWorkspaceEnvFile(): string | undefined {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      return undefined;
+    }
+    return getSelectedWorkspaceEnvFile(this.context, folder.uri.fsPath);
+  }
+
+  async setSelectedWorkspaceEnvFile(envFile: string): Promise<void> {
+    await setSelectedWorkspaceEnvFile(this.context, envFile);
+    this.notifyChanged();
+  }
+
   async ensureWorkspaceConnection(): Promise<MCPConnection | undefined> {
-    const workspace = findActiveWorkspaceCredentials();
+    const workspace = findActiveWorkspaceCredentials(this.context);
     if (!workspace) {
       return undefined;
     }
@@ -152,7 +167,7 @@ export class CommerceMcpManager {
       return stored.trim();
     }
 
-    const workspace = findActiveWorkspaceCredentials();
+    const workspace = findActiveWorkspaceCredentials(this.context);
     if (
       workspace &&
       workspace.projectKey === connection.projectKey &&
