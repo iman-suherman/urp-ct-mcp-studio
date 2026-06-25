@@ -1,0 +1,48 @@
+---
+description: Git commit message format and Jira ticket prefix from branch name
+alwaysApply: true
+---
+
+# Git Commit Message
+
+Apply these rules whenever creating git commits in this repository.
+
+## Ticket prefix from branch name
+
+Before committing, read the current branch with `git branch --show-current`.
+
+Extract the Jira-style ticket key from the branch name (pattern: `[A-Z]+-\d+`, e.g. `MVKS-168`, `HRZN-100`).
+
+Prefix every commit message with that ticket key:
+
+```
+<TICKET>: <description>
+```
+
+Examples:
+
+| Branch | Commit message |
+|--------|----------------|
+| `feature-MVKS-168` | `MVKS-168: add slug validation for wine build sheet` |
+| `bugfix-HRZN-100` | `HRZN-100: fix URL slug structure mismatch` |
+| `feature-ALPH-855` | `ALPH-855: strip whitespace from bulk upload identifiers` |
+
+Rules:
+
+- Use the ticket from the **current branch**, not from prior commits or guesswork.
+- If the branch has no ticket key, ask the user for the ticket before committing.
+- Do not duplicate the ticket if the message already starts with it.
+- Keep the description concise (1–2 sentences), focused on why rather than what.
+
+## Commit command format
+
+```bash
+git commit --author="Iman Suherman <iman.suherman@gmail.com>" -m "MVKS-168: Short description of the change."
+git log -1 --format=%B
+git log -1 --format="%an <%ae>"
+git push
+```
+
+Replace `MVKS-168` with the ticket extracted from the current branch. Always verify the author and that the log output has no co-author line.
+
+See also: `git-commit-author.mdc`, `git-no-cursor-coauthor.mdc`, `website-deploy-after-push.mdc`.

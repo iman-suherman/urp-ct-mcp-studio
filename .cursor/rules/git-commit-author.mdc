@@ -1,0 +1,47 @@
+---
+description: Git commit author identity and local hook setup for this repository
+alwaysApply: true
+---
+
+# Git Commit Author
+
+Always commit as **Iman Suherman** with email **iman.suherman@gmail.com**.
+
+- Pass `--author` on every commit. Do not rely on git config (global config may be `suherman@qantas.com.au`).
+- Format: `--author="Iman Suherman <iman.suherman@gmail.com>"`
+- If amending a commit, always include the same `--author` flag.
+
+```bash
+git commit --author="Iman Suherman <iman.suherman@gmail.com>" -m "MVKS-168: Short description of the change."
+git log -1 --format="%an <%ae>"
+```
+
+After committing, verify the author is `Iman Suherman <iman.suherman@gmail.com>`. If wrong, amend immediately:
+
+```bash
+GIT_COMMITTER_NAME="Iman Suherman" GIT_COMMITTER_EMAIL="iman.suherman@gmail.com" \
+  git commit --amend --author="Iman Suherman <iman.suherman@gmail.com>" --no-edit
+```
+
+## Local git hooks (repo setup)
+
+Install both hooks if missing. They enforce author and strip Cursor co-author lines even when `--author` is forgotten.
+
+**`.git/hooks/post-commit`** — auto-corrects wrong author or committer, then asynchronously checks ct-mcp plugin commits for release. Install from version-controlled hooks:
+
+```bash
+npm run install-hooks
+```
+
+Source: `githooks/post-commit`. After author/committer correction, plugin-only commits trigger `scripts/post-commit-release.cjs` in the background (logs to `.git/post-commit-release.log`). Set `CT_MCP_POST_COMMIT_RELEASE=0` to disable.
+
+**`.git/hooks/prepare-commit-msg`** — strips Cursor co-author trailers:
+
+```bash
+cat > .git/hooks/prepare-commit-msg << 'EOF'
+#!/bin/bash
+sed -i '' '/[Cc]o-authored-by:.*[Cc]ursor/d' "$1"
+sed -i '' '/cursoragent@cursor\.com/d' "$1"
+EOF
+chmod +x .git/hooks/prepare-commit-msg
+```

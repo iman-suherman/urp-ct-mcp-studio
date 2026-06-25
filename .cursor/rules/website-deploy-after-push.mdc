@@ -1,0 +1,64 @@
+---
+description: Async ct-mcp.suherman.net deploy after pushing website changes to GitHub
+globs: website/**/*
+alwaysApply: false
+---
+
+# Website Deploy After Push
+
+When you push commits to GitHub that change `website/` in **urp-ct-mcp-studio**, schedule an async deploy to **https://ct-mcp.suherman.net/** (Cloud Run `ct-mcp-website`).
+
+Hooks call `scripts/deploy-trigger.cjs` → `scripts/deploy-runner.cjs` (same tracked pipeline as `npm run ci`).
+
+## When this applies
+
+- Files under `website/` changed in commits being pushed
+- Push target is GitHub (`origin` or equivalent)
+- GCP deploy is configured (`npm run login`, valid ADC)
+
+## Required workflow after a successful push
+
+1. Push first (per `git-push-after-commit.mdc`):
+   ```bash
+   git push
+   ```
+2. Hooks schedule deploy automatically (`githooks/pre-push`, `githooks/post-commit`). If hooks are disabled, trigger manually:
+   ```bash
+   node scripts/deploy-trigger.cjs --repo ct-mcp-website
+   ```
+3. Tell the user deploy started in the background and how to monitor:
+   ```bash
+   npm run ci
+   ```
+   Do not block on `npm run deploy:website` unless the user asks to wait.
+
+## Monitor local deploy pipeline
+
+```bash
+npm run ci                  # live dashboard (Ctrl+C safe)
+npm run ci -- --once        # snapshot
+npm run deploy:retry        # retry failed/pending
+npm run deploy:stop -- --repo ct-mcp-website
+```
+
+| Path | Purpose |
+|------|---------|
+| `logs/deployments.json` | Deploy state |
+| `logs/ct-mcp-website/*.log` | Per-deploy output |
+| `.git/post-push-website.log` | Push hook worker |
+| `.git/post-commit-website.log` | Commit hook worker |
+
+## Disable
+
+```bash
+CT_MCP_POST_PUSH_WEBSITE=0 git push
+CT_MCP_POST_COMMIT_WEBSITE=0 git commit ...
+```
+
+## Do not
+
+- Run `deploy:website` synchronously in chat unless the user explicitly asks to wait for deploy completion
+- Deploy when push failed or was rejected
+- Force-push to `main`/`master` to trigger deploy
+
+See also: `scripts/ci-deploy-status.cjs`, `scripts/deploy-runner.cjs`, `npm run deploy:website`.
