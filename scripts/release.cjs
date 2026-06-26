@@ -185,6 +185,10 @@ async function main() {
   run("npm", ["run", "build"]);
   console.log("release: packaging…");
   run("npm", ["run", "package"]);
+  const { assertVsixPackageVersion } = require("./vsix-version.cjs");
+  const vsixPath = path.join(root, "releases", `${pkg.name}-${version}.vsix`);
+  assertVsixPackageVersion(vsixPath, version);
+  console.log(`release: verified ${path.basename(vsixPath)} embeds v${version}`);
 
   await uploadExtension({
     version,

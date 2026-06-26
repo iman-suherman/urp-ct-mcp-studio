@@ -12,6 +12,7 @@ const { ensureBucket, uploadObject } = require("./gcs-storage.cjs");
 const { assertSemver } = require("./semver.cjs");
 const { generateReleaseNotes, writeReleaseArtifacts } = require("./generate-release-notes.cjs");
 const { registerPluginVersion } = require("./register-version.cjs");
+const { assertVsixPackageVersion, readVsixPackageVersion } = require("./vsix-version.cjs");
 
 const root = path.join(__dirname, "..");
 const shell = process.platform === "win32";
@@ -61,16 +62,49 @@ function resolveReleasesDir() {
   return path.join(root, "releases");
 }
 
-function resolveVsixPath(packageJson, version) {
+function readPackageJson() {
+  return JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+}
+
+function ensurePackageJsonVersion(version) {
+  const pkg = readPackageJson();
+  if (pkg.version !== version) {
+    fail(
+      `package.json is v${pkg.version} but release target is v${version}. Run npm run release so the version is bumped before packaging.`
+    );
+  }
+}
+
+function resolveVsixPath(version) {
+  const packageJson = readPackageJson();
   const vsixName = `${packageJson.name}-${version}.vsix`;
   const vsixPath = path.join(resolveReleasesDir(), vsixName);
-  if (fs.existsSync(vsixPath)) return vsixPath;
 
-  console.log("upload: VSIX not found — running npm run package…");
+  if (fs.existsSync(vsixPath)) {
+    try {
+      const embedded = readVsixPackageVersion(vsixPath);
+      if (embedded === version) {
+        console.log(`upload: reusing ${vsixName} (embedded v${embedded})`);
+        return vsixPath;
+      }
+      console.warn(
+        `upload: stale ${vsixName} (embedded v${embedded}, expected v${version}) — rebuilding…`
+      );
+      fs.unlinkSync(vsixPath);
+    } catch (err) {
+      console.warn(`upload: unreadable ${vsixName} (${err.message}) — rebuilding…`);
+      fs.unlinkSync(vsixPath);
+    }
+  }
+
+  ensurePackageJsonVersion(version);
+  console.log(`upload: packaging ${vsixName}…`);
   run("npm", ["run", "package"]);
   if (!fs.existsSync(vsixPath)) {
     fail(`expected VSIX at ${vsixPath} after packaging`);
   }
+  assertVsixPackageVersion(vsixPath, version);
+  console.log(`upload: verified ${vsixName} embeds v${version}`);
   return vsixPath;
 }
 
@@ -82,9 +116,14 @@ async function uploadExtension(options = {}) {
     fail("GCP_PROJECT_ID is not set. Run: npm run login");
   }
 
-  const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const packageJson = readPackageJson();
   const version = options.version || packageJson.version;
   assertSemver(version, "package.json version");
+  if (options.version && packageJson.version !== options.version) {
+    fail(
+      `package.json is v${packageJson.version} but upload target is v${options.version}. Run npm run release instead of upload alone.`
+    );
+  }
 
   const previousLabel = options.previousVersion
     ? `v${options.previousVersion}`
@@ -101,7 +140,7 @@ async function uploadExtension(options = {}) {
 
   const bucket = resolveBucket(projectId);
   const prefix = resolvePrefix();
-  const vsixPath = resolveVsixPath(packageJson, version);
+  const vsixPath = resolveVsixPath(version);
   const vsixName = path.basename(vsixPath);
   const objectPath = prefix ? `${prefix}/${vsixName}` : vsixName;
   const latestObjectPath = prefix ? `${prefix}/latest.vsix` : "latest.vsix";

@@ -8,6 +8,8 @@ import { isNewerVersion } from "./semver";
 export const AUTO_UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 export const LAST_SUGGESTED_UPDATE_VERSION_KEY = "ctMcp.lastSuggestedUpdateVersion";
 export const PENDING_RELOAD_VERSION_KEY = "ctMcp.pendingReloadVersion";
+export const FAILED_UPDATE_VERSION_KEY = "ctMcp.failedUpdateVersion";
+export const LAST_ATTEMPTED_UPDATE_VERSION_KEY = "ctMcp.lastAttemptedUpdateVersion";
 
 export type UpdatePhase = "idle" | "checking" | "downloading" | "installing" | "installed";
 
@@ -85,6 +87,9 @@ export class UpdateService implements vscode.Disposable {
   }
 
   hasUpdateAvailable(): boolean {
+    if (this.isBlockedUpdateVersion(this.latestRelease?.version)) {
+      return false;
+    }
     return Boolean(
       this.latestRelease &&
         isNewerVersion(this.latestRelease.version, this.currentVersion) &&
@@ -112,10 +117,15 @@ export class UpdateService implements vscode.Disposable {
   getState(): ExtensionUpdateState {
     const resolvedPhase = this.resolvePhase();
     const latestVersion = this.latestRelease?.version;
+    const blockedVersion = this.getBlockedUpdateVersion();
     const updateAvailable =
       resolvedPhase === "installed"
         ? false
-        : Boolean(latestVersion && isNewerVersion(latestVersion, this.currentVersion));
+        : Boolean(
+            latestVersion &&
+              isNewerVersion(latestVersion, this.currentVersion) &&
+              latestVersion !== blockedVersion
+          );
 
     let progress: number | undefined;
     if (resolvedPhase === "installed") {
@@ -188,7 +198,9 @@ export class UpdateService implements vscode.Disposable {
       this.updateError = undefined;
 
       const updateAvailable = Boolean(
-        release && isNewerVersion(release.version, this.currentVersion)
+        release &&
+          isNewerVersion(release.version, this.currentVersion) &&
+          !this.isBlockedUpdateVersion(release.version)
       );
 
       if (this.resolvePhase() !== "installed") {
@@ -233,6 +245,11 @@ export class UpdateService implements vscode.Disposable {
       this.setPhase("idle");
       return;
     }
+    if (this.isBlockedUpdateVersion(release.version)) {
+      this.updateError = `v${release.version} could not be applied earlier (still on v${this.currentVersion}). Install a newer release instead.`;
+      this.setPhase("idle", this.updateError);
+      return;
+    }
 
     this.installing = true;
     this.updateError = undefined;
@@ -251,7 +268,9 @@ export class UpdateService implements vscode.Disposable {
       this.setPhase("installing", undefined, 100);
 
       await this.context.globalState.update(PENDING_RELOAD_VERSION_KEY, release.version);
+      await this.context.globalState.update(LAST_ATTEMPTED_UPDATE_VERSION_KEY, release.version);
       await this.context.globalState.update(LAST_SUGGESTED_UPDATE_VERSION_KEY, release.version);
+      await this.context.globalState.update(FAILED_UPDATE_VERSION_KEY, undefined);
       this.setPhase("installed");
 
       const restart = await vscode.window.showInformationMessage(
@@ -285,7 +304,52 @@ export class UpdateService implements vscode.Disposable {
     if (pending) {
       this.phase = "installed";
       this.updateProgress = 100;
+      return;
     }
+
+    const attempted = this.getLastAttemptedUpdateVersion();
+    if (!attempted) {
+      await this.reconcileFailedUpdateState();
+      return;
+    }
+
+    await this.context.globalState.update(LAST_ATTEMPTED_UPDATE_VERSION_KEY, undefined);
+    if (!isNewerVersion(attempted, this.currentVersion)) {
+      await this.context.globalState.update(FAILED_UPDATE_VERSION_KEY, undefined);
+      this.updateError = undefined;
+      this.phase = "idle";
+      return;
+    }
+
+    await this.context.globalState.update(FAILED_UPDATE_VERSION_KEY, attempted);
+    this.updateError = `Update to v${attempted} did not apply (still on v${this.currentVersion}). Install a newer release instead.`;
+    this.phase = "idle";
+  }
+
+  private getLastAttemptedUpdateVersion(): string | undefined {
+    const value = this.context.globalState.get<string>(LAST_ATTEMPTED_UPDATE_VERSION_KEY);
+    return value?.trim() || undefined;
+  }
+
+  private async reconcileFailedUpdateState(): Promise<void> {
+    const failed = this.getBlockedUpdateVersion();
+    if (!failed) {
+      return;
+    }
+    if (!isNewerVersion(failed, this.currentVersion)) {
+      await this.context.globalState.update(FAILED_UPDATE_VERSION_KEY, undefined);
+      this.updateError = undefined;
+    }
+  }
+
+  private getBlockedUpdateVersion(): string | undefined {
+    const value = this.context.globalState.get<string>(FAILED_UPDATE_VERSION_KEY);
+    return value?.trim() || undefined;
+  }
+
+  private isBlockedUpdateVersion(version?: string): boolean {
+    const blocked = this.getBlockedUpdateVersion();
+    return Boolean(blocked && version && blocked === version);
   }
 
   private resolvePhase(): UpdatePhase {
@@ -336,6 +400,9 @@ export class UpdateService implements vscode.Disposable {
     showNotification: boolean
   ): Promise<void> {
     if (!showNotification || !this.isAutoUpdateEnabled()) {
+      return;
+    }
+    if (this.isBlockedUpdateVersion(release.version)) {
       return;
     }
 
