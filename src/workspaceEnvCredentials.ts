@@ -33,6 +33,7 @@ const PROJECT_KEY_KEYS = [
   "COMMERCETOOLS_PROJECT_KEY",
   "CTP_PROJECT_KEY",
   "CTOOLS_PROJECT_KEY",
+  "COMM_TOOLS_PROJECT_KEY",
   "PROJECT_KEY",
 ] as const;
 
@@ -54,6 +55,7 @@ function normalizeCommercetoolsUrls(
 
 export const WORKSPACE_ENV_SELECTED_KEY = "ctMcp.selectedWorkspaceEnvFile";
 export const WORKSPACE_ENV_SUFFIX_KEY = "ctMcp.selectedWorkspaceEnvSuffix";
+export const WORKSPACE_MANUAL_PROJECT_KEYS = "ctMcp.manualProjectKeysBySuffix";
 
 export interface CommercetoolsHostingRegion {
   id: string;
@@ -136,6 +138,12 @@ export interface WorkspaceEnvProbe {
   hasEnvMcpFile: boolean;
   selectedHostingRegionId: string;
   selectedHostingCloud: CommercetoolsHostingRegion["cloud"];
+  hasClientCredentials: boolean;
+  hasProjectKeyInEnv: boolean;
+  missingProjectKey: boolean;
+  manualProjectKey?: string;
+  clientId?: string;
+  isAdminClient?: boolean;
   credentials?: WorkspaceCredentials;
 }
 
@@ -305,6 +313,37 @@ export async function setSelectedWorkspaceEnvSuffix(
   await context.workspaceState.update(WORKSPACE_ENV_SUFFIX_KEY, envSuffix.toUpperCase());
 }
 
+function manualProjectKeyStorageKey(envSuffix?: string): string {
+  return envSuffix?.trim().toUpperCase() || "__default__";
+}
+
+export function getManualProjectKey(
+  context: import("vscode").ExtensionContext,
+  envSuffix?: string
+): string | undefined {
+  const map = context.workspaceState.get<Record<string, string>>(WORKSPACE_MANUAL_PROJECT_KEYS) ?? {};
+  const saved = map[manualProjectKeyStorageKey(envSuffix)]?.trim();
+  return saved || undefined;
+}
+
+export async function setManualProjectKey(
+  context: import("vscode").ExtensionContext,
+  projectKey: string,
+  envSuffix?: string
+): Promise<void> {
+  const map = {
+    ...(context.workspaceState.get<Record<string, string>>(WORKSPACE_MANUAL_PROJECT_KEYS) ?? {}),
+  };
+  const normalized = projectKey.trim();
+  const storageKey = manualProjectKeyStorageKey(envSuffix);
+  if (normalized) {
+    map[storageKey] = normalized;
+  } else {
+    delete map[storageKey];
+  }
+  await context.workspaceState.update(WORKSPACE_MANUAL_PROJECT_KEYS, map);
+}
+
 export function buildCommercetoolsRegionUrls(
   cloud: CommercetoolsHostingRegion["cloud"],
   region: string
@@ -399,7 +438,11 @@ export function createOrUpdateEnvMcpUrls(
 export function probeWorkspaceEnv(
   workspaceRoot: string,
   envFileName: string,
-  options: { workspaceFolder?: string; envSuffix?: string } = {}
+  options: {
+    workspaceFolder?: string;
+    envSuffix?: string;
+    manualProjectKey?: string;
+  } = {}
 ): WorkspaceEnvProbe {
   const env = loadEnvForSource(workspaceRoot, envFileName);
   const detectedEnvSuffixes = detectEnvSuffixesInWorkspace(workspaceRoot, envFileName);
@@ -410,10 +453,14 @@ export function probeWorkspaceEnv(
   const explicitAuthUrl = firstDefinedWithSuffix(env, [...AUTH_URL_KEYS], selectedEnvSuffix);
   const explicitApiUrl = firstDefinedWithSuffix(env, [...API_URL_KEYS], selectedEnvSuffix);
   const hostingRegion = resolveHostingRegionFromWorkspace(workspaceRoot);
+  const client = resolveClientCredentials(env, selectedEnvSuffix);
+  const projectKeyFromEnv = firstDefinedWithSuffix(env, [...PROJECT_KEY_KEYS], selectedEnvSuffix);
+  const manualProjectKey = options.manualProjectKey?.trim();
   const credentials = resolveCredentialsFromEnv(env, {
     workspaceFolder: options.workspaceFolder,
     source: envFileName,
     envSuffix: selectedEnvSuffix,
+    manualProjectKey,
   });
 
   return {
@@ -426,6 +473,12 @@ export function probeWorkspaceEnv(
     hasEnvMcpFile: hasEnvMcpFile(workspaceRoot),
     selectedHostingRegionId: hostingRegion.id,
     selectedHostingCloud: hostingRegion.cloud,
+    hasClientCredentials: Boolean(client),
+    hasProjectKeyInEnv: Boolean(projectKeyFromEnv),
+    missingProjectKey: Boolean(client) && !projectKeyFromEnv && !manualProjectKey,
+    manualProjectKey,
+    clientId: client?.clientId,
+    isAdminClient: client?.isAdmin,
     credentials,
   };
 }
@@ -577,12 +630,18 @@ function loadEnvForSource(workspaceRoot: string, envFileName: string): Record<st
 
 export function resolveCredentialsFromEnv(
   env: Record<string, string>,
-  options: { workspaceFolder?: string; source?: string; envSuffix?: string } = {}
+  options: {
+    workspaceFolder?: string;
+    source?: string;
+    envSuffix?: string;
+    manualProjectKey?: string;
+  } = {}
 ): WorkspaceCredentials | undefined {
   const envSuffix = resolveEnvSuffix(env, options);
-  const projectKey = firstDefinedWithSuffix(env, [...PROJECT_KEY_KEYS], envSuffix);
+  const projectKeyFromEnv = firstDefinedWithSuffix(env, [...PROJECT_KEY_KEYS], envSuffix);
+  const projectKey = projectKeyFromEnv ?? options.manualProjectKey?.trim();
   const client = resolveClientCredentials(env, envSuffix);
-  if (!projectKey || !client) {
+  if (!client || !projectKey) {
     return undefined;
   }
 
@@ -714,7 +773,8 @@ export function findWorkspaceCredentialsFromFile(
   workspaceRoot: string,
   envFileName: string,
   workspaceFolderName?: string,
-  envSuffix?: string
+  envSuffix?: string,
+  manualProjectKey?: string
 ): WorkspaceCredentials | undefined {
   const filePath = path.join(workspaceRoot, envFileName);
   if (!fs.existsSync(filePath)) {
@@ -730,6 +790,7 @@ export function findWorkspaceCredentialsFromFile(
     workspaceFolder: workspaceFolderName,
     source: envFileName,
     envSuffix: envSuffix ?? envSuffixFromSource(envFileName),
+    manualProjectKey,
   });
 }
 
@@ -737,14 +798,16 @@ export function findWorkspaceCredentials(
   workspaceRoot: string,
   workspaceFolderName?: string,
   envFileName?: string,
-  envSuffix?: string
+  envSuffix?: string,
+  manualProjectKey?: string
 ): WorkspaceCredentials | undefined {
   if (envFileName) {
     return findWorkspaceCredentialsFromFile(
       workspaceRoot,
       envFileName,
       workspaceFolderName,
-      envSuffix
+      envSuffix,
+      manualProjectKey
     );
   }
 
@@ -762,6 +825,7 @@ export function findWorkspaceCredentials(
     workspaceFolder: workspaceFolderName,
     source: merged.sources.join(" + "),
     envSuffix,
+    manualProjectKey,
   });
 }
 
@@ -788,12 +852,19 @@ export function findActiveWorkspaceEnvProbe(
     const envSuffix = context
       ? getSelectedWorkspaceEnvSuffix(context, workspaceRoot, envFileName)
       : undefined;
+    const manualProjectKey = context ? getManualProjectKey(context, envSuffix) : undefined;
 
     const probe = probeWorkspaceEnv(workspaceRoot, envFileName, {
       workspaceFolder: folder.name,
       envSuffix,
+      manualProjectKey,
     });
-    if (probe.credentials || probe.detectedEnvSuffixes.length > 0 || probe.hasEnvMcpFile) {
+    if (
+      probe.credentials ||
+      probe.hasClientCredentials ||
+      probe.detectedEnvSuffixes.length > 0 ||
+      probe.hasEnvMcpFile
+    ) {
       return probe;
     }
   }
@@ -825,12 +896,14 @@ export function findActiveWorkspaceCredentials(
     const envSuffix = context
       ? getSelectedWorkspaceEnvSuffix(context, workspaceRoot, selectedEnvFile ?? ".env")
       : undefined;
+    const manualProjectKey = context ? getManualProjectKey(context, envSuffix) : undefined;
 
     const credentials = findWorkspaceCredentials(
       workspaceRoot,
       folder.name,
       selectedEnvFile,
-      envSuffix
+      envSuffix,
+      manualProjectKey
     );
     if (credentials) {
       return credentials;

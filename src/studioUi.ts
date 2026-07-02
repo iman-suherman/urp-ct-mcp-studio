@@ -75,6 +75,12 @@ export interface StudioPanelState {
   selectedHostingCloud: string;
   selectedHostingRegionId: string;
   hostingRegions: Array<{ id: string; cloud: string; label: string }>;
+  hasClientCredentials: boolean;
+  hasProjectKeyInEnv: boolean;
+  missingProjectKey: boolean;
+  manualProjectKey?: string;
+  workspaceClientId?: string;
+  workspaceIsAdmin?: boolean;
   autoConnectOnStartup: boolean;
   currentVersion: string;
   latestVersion?: string;
@@ -96,6 +102,7 @@ export type StudioWebviewMessage =
   | { type: "selectWorkspaceEnvSuffix"; envSuffix: string }
   | { type: "createEnvMcp" }
   | { type: "selectHostingRegion"; regionId: string }
+  | { type: "setManualProjectKey"; projectKey: string }
   | { type: "disconnect" }
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
@@ -218,7 +225,9 @@ export class StudioUiController {
           }
         : undefined,
       hasWorkspaceEnvFiles:
-        workspaceEnvSources.length > 0 || (workspaceEnvProbe?.hasEnvMcpFile ?? false),
+        workspaceEnvSources.length > 0 ||
+        (workspaceEnvProbe?.hasEnvMcpFile ?? false) ||
+        (workspaceEnvProbe?.hasClientCredentials ?? false),
       workspaceEnvSources,
       selectedWorkspaceEnvFile: this.manager.getSelectedWorkspaceEnvFile(),
       detectedEnvSuffixes: workspaceEnvProbe?.detectedEnvSuffixes ?? [],
@@ -234,6 +243,12 @@ export class StudioUiController {
         cloud: region.cloud,
         label: region.label,
       })),
+      hasClientCredentials: workspaceEnvProbe?.hasClientCredentials ?? false,
+      hasProjectKeyInEnv: workspaceEnvProbe?.hasProjectKeyInEnv ?? false,
+      missingProjectKey: workspaceEnvProbe?.missingProjectKey ?? false,
+      manualProjectKey: workspaceEnvProbe?.manualProjectKey ?? this.manager.getManualProjectKey(),
+      workspaceClientId: workspaceEnvProbe?.clientId,
+      workspaceIsAdmin: workspaceEnvProbe?.isAdminClient,
       autoConnectOnStartup: resolveStudioConfig().autoConnectOnStartup,
       currentVersion: update.currentVersion,
       latestVersion: update.latestVersion,
@@ -313,6 +328,15 @@ export class StudioUiController {
           const text = err instanceof Error ? err.message : String(err);
           await this.pushState(text);
         }
+        break;
+
+      case "setManualProjectKey":
+        await this.manager.setManualProjectKey(message.projectKey);
+        await this.pushState(
+          message.projectKey.trim()
+            ? `Using project key "${message.projectKey.trim()}".`
+            : "Cleared manual project key."
+        );
         break;
 
       case "disconnect":
@@ -747,6 +771,15 @@ export function renderStudioHtml(options: {
       padding-left: 10px;
       border-left: 2px solid rgba(128,128,128,.2);
     }
+    .connection-env-sub-picker input[type="text"] {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(128,128,128,.25);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+    }
     .connection-hosting-picker {
       margin: 10px 0 12px;
       padding: 10px 12px;
@@ -978,6 +1011,10 @@ export function renderStudioHtml(options: {
         <label for="workspace-env-suffix-select">Environment</label>
         <select id="workspace-env-suffix-select" aria-label="Workspace environment suffix"></select>
       </div>
+      <div id="connection-project-key-picker" class="connection-env-sub-picker hidden">
+        <label for="manual-project-key">Project key</label>
+        <input id="manual-project-key" type="text" placeholder="e.g. my-project-stg" aria-label="Commercetools project key" />
+      </div>
     </div>
 
     <div id="connection-hosting-picker" class="connection-hosting-picker hidden">
@@ -996,10 +1033,9 @@ export function renderStudioHtml(options: {
         Click <strong>+ .env.mcp</strong> to add auth/API URLs, then pick cloud and region in the panel.
         Supported prefixes: <code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>.
       </p>
-      <pre class="connection-env-example"># .env — credentials per environment
+      <pre class="connection-env-example"># .env — client credentials per environment (project key optional here)
 COMM_TOOLS_ADMIN_CLIENT_ID_STG=your-client-id
 COMM_TOOLS_ADMIN_CLIENT_SECRET_STG=your-client-secret
-CTP_PROJECT_KEY_STG=your-project-key
 
 # .env.mcp — created via + .env.mcp (default Australia GCP)
 CT_MCP_AUTH_URL=https://auth.australia-southeast1.gcp.commercetools.com
@@ -1280,6 +1316,19 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
         vscode.postMessage({ type: 'selectHostingRegion', regionId: selected.id });
       }
     });
+    function applyManualProjectKey() {
+      const input = document.getElementById('manual-project-key');
+      if (!input) return;
+      vscode.postMessage({ type: 'setManualProjectKey', projectKey: input.value || '' });
+    }
+
+    document.getElementById('manual-project-key').addEventListener('change', applyManualProjectKey);
+    document.getElementById('manual-project-key').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyManualProjectKey();
+      }
+    });
     document.getElementById('workspace-env-suffix-select').addEventListener('change', (event) => {
       const target = event.target;
       if (target.value) {
@@ -1302,20 +1351,20 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
     }
 
     function resolveConnectionProfile(next) {
-      if (!next.hasWorkspaceEnvFiles || !next.workspaceCredentials) {
-        return undefined;
+      if (next.workspaceCredentials) {
+        const creds = next.workspaceCredentials;
+        const conn = next.activeConnection;
+        return {
+          name: conn?.name || creds.name,
+          projectKey: creds.projectKey,
+          clientId: creds.clientId,
+          authUrl: creds.authUrl,
+          apiUrl: creds.apiUrl,
+          isAdmin: creds.isAdmin,
+          source: creds.source,
+        };
       }
-      const creds = next.workspaceCredentials;
-      const conn = next.activeConnection;
-      return {
-        name: conn?.name || creds.name,
-        projectKey: creds.projectKey,
-        clientId: creds.clientId,
-        authUrl: creds.authUrl,
-        apiUrl: creds.apiUrl,
-        isAdmin: creds.isAdmin,
-        source: creds.source,
-      };
+      return undefined;
     }
 
     function connectionBannerLabel(next) {
@@ -1350,6 +1399,23 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
           '<span>' + chip.label + '</span>' +
           '</div>';
       }).join('');
+    }
+
+    function renderProjectKeyPicker(next) {
+      const picker = document.getElementById('connection-project-key-picker');
+      const input = document.getElementById('manual-project-key');
+      const show = next.hasClientCredentials === true && next.hasProjectKeyInEnv !== true;
+      if (!show) {
+        picker.classList.add('hidden');
+        if (input) input.value = '';
+        return;
+      }
+
+      picker.classList.remove('hidden');
+      const saved = next.manualProjectKey || '';
+      if (input && document.activeElement !== input) {
+        input.value = saved;
+      }
     }
 
     function renderWorkspaceEnvSuffixPicker(next) {
@@ -1441,10 +1507,11 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
 
       renderWorkspaceEnvPicker(next);
       renderWorkspaceEnvSuffixPicker(next);
+      renderProjectKeyPicker(next);
       renderHostingPicker(next);
 
       const profile = resolveConnectionProfile(next);
-      const canConnect = next.hasWorkspaceEnvFiles && next.workspaceCredentials;
+      const canConnect = Boolean(next.workspaceCredentials);
       const connected = next.connected === true;
       const busy = next.busy === true;
       const health = next.health;
@@ -1461,6 +1528,10 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
         title.textContent = 'Connected';
         subtitle.textContent = connectionBannerLabel(next) +
           ' · ' + (health && health.toolsLoaded != null ? health.toolsLoaded : 0) + ' tools loaded';
+      } else if (next.hasClientCredentials && next.missingProjectKey) {
+        banner.classList.add('ready');
+        title.textContent = 'Project key required';
+        subtitle.textContent = 'Client credentials loaded from .env — enter your commercetools project key below';
       } else if (profile) {
         banner.classList.add('ready');
         title.textContent = 'Ready to connect';
@@ -1471,6 +1542,10 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
           (next.selectedWorkspaceEnvFile || next.workspaceCredentials?.source || 'workspace .env') +
           (next.missingAuthApiUrls ? ' · add .env.mcp for auth/API URLs' : '') +
           ' · click Connect to start ' + profile.name + ' (' + profile.projectKey + ')';
+      } else if (next.hasClientCredentials) {
+        banner.classList.add('disconnected');
+        title.textContent = 'Incomplete credentials';
+        subtitle.textContent = 'Check client secret in .env and enter project key if missing';
       } else if (next.hasWorkspaceEnvFiles) {
         banner.classList.add('disconnected');
         title.textContent = 'Incomplete credentials';
@@ -1499,7 +1574,7 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
         scopeBadge.style.background = profile.isAdmin ? 'rgba(34,197,94,.15)' : 'rgba(128,128,128,.12)';
         const rows = [
           ['Connection', profile.name],
-          ['Project key', profile.projectKey],
+          ['Project key', profile.projectKey + (next.hasProjectKeyInEnv ? '' : ' (manual)')],
           ['Client ID', maskClientId(profile.clientId)],
           ['Environment', next.selectedWorkspaceEnvSuffix || (next.detectedEnvSuffixes || [])[0] || '—'],
           ['Auth URL', (profile.authUrl || '—') + (next.hasExplicitAuthUrl ? '' : ' (default)')],
@@ -1513,6 +1588,12 @@ CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
         props.innerHTML = rows.map(function (row) {
           return '<div class="connection-prop"><dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(row[1]) + '</dd></div>';
         }).join('');
+      } else if (next.hasClientCredentials) {
+        details.classList.remove('hidden');
+        scopeBadge.classList.add('hidden');
+        props.innerHTML = '<div class="connection-prop"><dt>Client ID</dt><dd>' +
+          escapeHtml(maskClientId(next.workspaceClientId || '—')) +
+          '</dd></div><div class="connection-prop"><dt>Project key</dt><dd>Enter below</dd></div>';
       } else {
         details.classList.add('hidden');
         props.innerHTML = '';

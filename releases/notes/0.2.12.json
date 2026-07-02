@@ -1,0 +1,17 @@
+{
+  "version": "0.2.12",
+  "summary": "Commerce MCP Studio 0.2.12: manual project key entry when .env has client credentials only.",
+  "highlights": [
+    "Enter commercetools project key in the panel when .env has client ID/secret but no PROJECT_KEY",
+    "Supports COMM_TOOLS_*_STG suffixed credentials with optional project key in .env",
+    "Manual project key is saved per environment (STG, DEV, …)"
+  ],
+  "releaseNotes": {
+    "introduced": [
+      "Project key field appears under Environment when client credentials are probed from .env without a project key"
+    ],
+    "changed": [
+      "COMM_TOOLS_PROJECT_KEY and suffixed admin client variables are recognized from workspace .env"
+    ]
+  }
+}

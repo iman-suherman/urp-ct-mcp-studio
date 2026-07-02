@@ -15,7 +15,9 @@ import {
   findActiveWorkspaceEnvProbe,
   getSelectedWorkspaceEnvFile,
   getSelectedWorkspaceEnvSuffix,
+  getManualProjectKey,
   hasEnvMcpFile,
+  setManualProjectKey,
   setSelectedWorkspaceEnvFile,
   setSelectedWorkspaceEnvSuffix,
   WorkspaceCredentials,
@@ -140,6 +142,15 @@ export class CommerceMcpManager {
 
   async setSelectedWorkspaceEnvSuffix(envSuffix: string): Promise<void> {
     await setSelectedWorkspaceEnvSuffix(this.context, envSuffix);
+    this.notifyChanged();
+  }
+
+  getManualProjectKey(): string | undefined {
+    return getManualProjectKey(this.context, this.getSelectedWorkspaceEnvSuffix());
+  }
+
+  async setManualProjectKey(projectKey: string): Promise<void> {
+    await setManualProjectKey(this.context, projectKey, this.getSelectedWorkspaceEnvSuffix());
     this.notifyChanged();
   }
 
