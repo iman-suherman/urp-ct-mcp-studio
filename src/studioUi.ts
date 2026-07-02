@@ -4,6 +4,7 @@ import { formatLogTimestamp } from "./logStore";
 import { buildAiPrompt, buildChatPrompt } from "./mcpBootstrap";
 import { buildProductSearchChatPrompt } from "./mcpChatContext";
 import { CommerceMcpManager } from "./mcpManager";
+import { COMMERCETOOLS_HOSTING_REGIONS } from "./workspaceEnvCredentials";
 import { groupToolsByCategory } from "./toolCatalog";
 import { PROMPT_TEMPLATES } from "./templates";
 import { ConnectionHealth, LogEntry, MCPConnection } from "./types";
@@ -70,6 +71,10 @@ export interface StudioPanelState {
   missingAuthApiUrls: boolean;
   hasExplicitAuthUrl: boolean;
   hasExplicitApiUrl: boolean;
+  hasEnvMcpFile: boolean;
+  selectedHostingCloud: string;
+  selectedHostingRegionId: string;
+  hostingRegions: Array<{ id: string; cloud: string; label: string }>;
   autoConnectOnStartup: boolean;
   currentVersion: string;
   latestVersion?: string;
@@ -89,8 +94,8 @@ export type StudioWebviewMessage =
   | { type: "connectFromWorkspace" }
   | { type: "selectWorkspaceEnv"; envFile: string }
   | { type: "selectWorkspaceEnvSuffix"; envSuffix: string }
-  | { type: "createSupplementEnv" }
-  | { type: "createEnvMcpUrls" }
+  | { type: "createEnvMcp" }
+  | { type: "selectHostingRegion"; regionId: string }
   | { type: "disconnect" }
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
@@ -212,7 +217,8 @@ export class StudioUiController {
             isAdmin: workspaceCredentials.isAdmin,
           }
         : undefined,
-      hasWorkspaceEnvFiles: workspaceEnvSources.length > 0,
+      hasWorkspaceEnvFiles:
+        workspaceEnvSources.length > 0 || (workspaceEnvProbe?.hasEnvMcpFile ?? false),
       workspaceEnvSources,
       selectedWorkspaceEnvFile: this.manager.getSelectedWorkspaceEnvFile(),
       detectedEnvSuffixes: workspaceEnvProbe?.detectedEnvSuffixes ?? [],
@@ -220,6 +226,14 @@ export class StudioUiController {
       missingAuthApiUrls: workspaceEnvProbe?.missingAuthApiUrls ?? false,
       hasExplicitAuthUrl: workspaceEnvProbe?.hasExplicitAuthUrl ?? false,
       hasExplicitApiUrl: workspaceEnvProbe?.hasExplicitApiUrl ?? false,
+      hasEnvMcpFile: workspaceEnvProbe?.hasEnvMcpFile ?? this.manager.hasEnvMcpFile(),
+      selectedHostingCloud: workspaceEnvProbe?.selectedHostingCloud ?? "gcp",
+      selectedHostingRegionId: workspaceEnvProbe?.selectedHostingRegionId ?? "gcp.australia-southeast1",
+      hostingRegions: COMMERCETOOLS_HOSTING_REGIONS.map((region) => ({
+        id: region.id,
+        cloud: region.cloud,
+        label: region.label,
+      })),
       autoConnectOnStartup: resolveStudioConfig().autoConnectOnStartup,
       currentVersion: update.currentVersion,
       latestVersion: update.latestVersion,
@@ -276,36 +290,25 @@ export class StudioUiController {
         await this.pushState(`Using ${message.envSuffix} credentials from workspace .env.`);
         break;
 
-      case "createSupplementEnv":
+      case "createEnvMcp":
         await this.pushState(undefined, true);
         try {
-          const result = await this.manager.createSupplementEnvFile();
-          if (result) {
-            const note = result.created
-              ? `Created ${result.fileName} with Australia GCP auth/API URLs.`
-              : `${result.fileName} already exists — opened for editing.`;
-            await this.pushState(note);
-          } else {
-            await this.pushState();
-          }
+          const result = await this.manager.createEnvMcp();
+          const note = result.created
+            ? `Created ${result.fileName} — pick cloud and region below.`
+            : `${result.fileName} is ready — adjust cloud and region below.`;
+          await this.pushState(note);
         } catch (err) {
           const text = err instanceof Error ? err.message : String(err);
           await this.pushState(text);
         }
         break;
 
-      case "createEnvMcpUrls":
+      case "selectHostingRegion":
         await this.pushState(undefined, true);
         try {
-          const result = await this.manager.createEnvMcpUrls();
-          if (result) {
-            const note = result.created
-              ? `Created ${result.fileName} with selected region URLs.`
-              : `Updated ${result.fileName} with selected region URLs.`;
-            await this.pushState(note);
-          } else {
-            await this.pushState();
-          }
+          await this.manager.setHostingRegion(message.regionId);
+          await this.pushState();
         } catch (err) {
           const text = err instanceof Error ? err.message : String(err);
           await this.pushState(text);
@@ -739,17 +742,43 @@ export function renderStudioHtml(options: {
       color: var(--vscode-input-foreground);
       font: inherit;
     }
-    .connection-env-suffix-hint {
-      margin: 0;
-      font-size: 11px;
-      color: var(--vscode-descriptionForeground);
+    .connection-env-sub-picker {
+      margin-left: 12px;
+      padding-left: 10px;
+      border-left: 2px solid rgba(128,128,128,.2);
     }
-    .connection-env-mcp-hint {
+    .connection-hosting-picker {
       margin: 10px 0 12px;
       padding: 10px 12px;
       border-radius: 8px;
-      border: 1px solid rgba(251, 191, 36, .35);
-      background: rgba(251, 191, 36, .08);
+      border: 1px solid rgba(128,128,128,.2);
+      background: rgba(128,128,128,.06);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .connection-hosting-picker-title {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .connection-hosting-picker-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .connection-hosting-picker-row select {
+      flex: 1;
+      min-width: 0;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(128,128,128,.25);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
     }
     .connection-env-hint {
       border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
@@ -940,55 +969,43 @@ export function renderStudioHtml(options: {
     </div>
 
     <div id="connection-env-picker" class="connection-env-picker hidden">
-      <label for="workspace-env-select">Env file</label>
+      <label for="workspace-env-select">Credentials (.env)</label>
       <div class="connection-env-picker-row">
-        <select id="workspace-env-select" aria-label="Workspace env file"></select>
-        <button id="btn-create-supplement-env" type="button" title="Create per-environment supplement .env with Australia GCP URLs">+ Supplement</button>
+        <select id="workspace-env-select" aria-label="Workspace credentials env file"></select>
+        <button id="btn-create-env-mcp" type="button" title="Create .env.mcp with Australia GCP auth/API URLs">+ .env.mcp</button>
+      </div>
+      <div id="connection-env-suffix-picker" class="connection-env-sub-picker hidden">
+        <label for="workspace-env-suffix-select">Environment</label>
+        <select id="workspace-env-suffix-select" aria-label="Workspace environment suffix"></select>
       </div>
     </div>
 
-    <div id="connection-env-suffix-picker" class="connection-env-picker hidden">
-      <label for="workspace-env-suffix-select">Environment</label>
-      <select id="workspace-env-suffix-select" aria-label="Workspace environment suffix"></select>
-      <p class="connection-env-suffix-hint">Probed from suffixed variables in your <code>.env</code> (e.g. <code>COMM_TOOLS_ADMIN_CLIENT_ID_STG</code>).</p>
-    </div>
-
-    <div id="connection-env-mcp-hint" class="connection-env-mcp-hint hidden">
-      <p class="connection-env-hint-title">Auth/API URLs not configured</p>
-      <p class="connection-env-hint-desc">
-        Credentials were found, but no auth or API URL is set for the selected environment.
-        Create or update <code>.env.mcp</code> with the commercetools region and cloud for your project.
-      </p>
-      <div class="connection-copilot-actions">
-        <button id="btn-create-env-mcp" class="primary" type="button">Add URLs to .env.mcp</button>
+    <div id="connection-hosting-picker" class="connection-hosting-picker hidden">
+      <p class="connection-hosting-picker-title">Region (.env.mcp)</p>
+      <div class="connection-hosting-picker-row">
+        <select id="hosting-cloud-select" aria-label="Cloud provider"></select>
+        <select id="hosting-region-select" aria-label="commercetools region"></select>
       </div>
     </div>
 
     <div id="connection-env-hint" class="connection-env-hint hidden">
       <p class="connection-env-hint-title">Example workspace <code>.env</code></p>
       <p class="connection-env-hint-desc">
-        Create <code>.env</code> in your project root. You can also use
-        <code>.env.local</code>, <code>.env.dev</code>, <code>.env.sit</code>, <code>.env.stg</code>, or <code>.env.mcp</code>.
-        When multiple files exist, pick which one to connect with below.
+        Create <code>.env</code> in your project root with suffixed credentials
+        (e.g. <code>COMM_TOOLS_ADMIN_CLIENT_ID_STG</code>).
+        Click <strong>+ .env.mcp</strong> to add auth/API URLs, then pick cloud and region in the panel.
         Supported prefixes: <code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>.
-        Use environment suffixes in <code>.env</code> (e.g. <code>COMM_TOOLS_ADMIN_CLIENT_ID_STG</code>) and a supplement file
-        (e.g. <code>.env.stg</code>) for auth/API URLs.
       </p>
-      <pre class="connection-env-example"># .env — credentials with environment suffix
+      <pre class="connection-env-example"># .env — credentials per environment
 COMM_TOOLS_ADMIN_CLIENT_ID_STG=your-client-id
 COMM_TOOLS_ADMIN_CLIENT_SECRET_STG=your-client-secret
 CTP_PROJECT_KEY_STG=your-project-key
 
-# .env.stg — supplement (use + Supplement, defaults to Australia GCP)
-CTP_AUTH_URL=https://auth.australia-southeast1.gcp.commercetools.com
-CTP_API_URL=https://api.australia-southeast1.gcp.commercetools.com
-
-# Or unsuffixed keys in a single file
-CTP_PROJECT_KEY=my-project-key
-CTP_CLIENT_ID=your-client-id
-CTP_CLIENT_SECRET=your-client-secret</pre>
+# .env.mcp — created via + .env.mcp (default Australia GCP)
+CT_MCP_AUTH_URL=https://auth.australia-southeast1.gcp.commercetools.com
+CT_MCP_API_URL=https://api.australia-southeast1.gcp.commercetools.com</pre>
       <div class="connection-copilot-actions" style="margin-top:8px;">
-        <button id="btn-create-env-mcp-hint" type="button">Add URLs to .env.mcp</button>
+        <button id="btn-create-env-mcp-hint" type="button">+ .env.mcp</button>
       </div>
     </div>
 
@@ -1237,14 +1254,31 @@ CTP_CLIENT_SECRET=your-client-secret</pre>
         vscode.postMessage({ type: 'selectWorkspaceEnv', envFile: target.value });
       }
     });
-    document.getElementById('btn-create-supplement-env').addEventListener('click', () => {
-      vscode.postMessage({ type: 'createSupplementEnv' });
-    });
     document.getElementById('btn-create-env-mcp').addEventListener('click', () => {
-      vscode.postMessage({ type: 'createEnvMcpUrls' });
+      vscode.postMessage({ type: 'createEnvMcp' });
     });
     document.getElementById('btn-create-env-mcp-hint').addEventListener('click', () => {
-      vscode.postMessage({ type: 'createEnvMcpUrls' });
+      vscode.postMessage({ type: 'createEnvMcp' });
+    });
+    document.getElementById('hosting-region-select').addEventListener('change', (event) => {
+      const target = event.target;
+      if (target.value) {
+        vscode.postMessage({ type: 'selectHostingRegion', regionId: target.value });
+      }
+    });
+    document.getElementById('hosting-cloud-select').addEventListener('change', (event) => {
+      const target = event.target;
+      const cloud = target.value;
+      const regionSelect = document.getElementById('hosting-region-select');
+      const regions = (state.hostingRegions || []).filter((entry) => entry.cloud === cloud);
+      const selected = regions[0];
+      regionSelect.innerHTML = regions.map(function (entry) {
+        return '<option value="' + escapeHtml(entry.id) + '">' + escapeHtml(entry.label) + '</option>';
+      }).join('');
+      if (selected) {
+        regionSelect.value = selected.id;
+        vscode.postMessage({ type: 'selectHostingRegion', regionId: selected.id });
+      }
     });
     document.getElementById('workspace-env-suffix-select').addEventListener('change', (event) => {
       const target = event.target;
@@ -1325,9 +1359,8 @@ CTP_CLIENT_SECRET=your-client-secret</pre>
       const selectedFile = next.selectedWorkspaceEnvFile || '';
       const suffixPinnedByFile = selectedFile &&
         selectedFile !== '.env' &&
-        selectedFile !== '.env.local' &&
-        selectedFile !== '.env.mcp';
-      if (suffixPinnedByFile || !suffixes.length || suffixes.length < 2) {
+        selectedFile !== '.env.local';
+      if (suffixPinnedByFile || !suffixes.length) {
         picker.classList.add('hidden');
         selectEl.innerHTML = '';
         return;
@@ -1341,11 +1374,37 @@ CTP_CLIENT_SECRET=your-client-secret</pre>
       }).join('');
     }
 
-    function renderMissingUrlsHint(next) {
-      const hint = document.getElementById('connection-env-mcp-hint');
-      const profile = resolveConnectionProfile(next);
-      const show = Boolean(profile) && next.missingAuthApiUrls === true && next.connected !== true;
-      hint.classList.toggle('hidden', !show);
+    function renderHostingPicker(next) {
+      const picker = document.getElementById('connection-hosting-picker');
+      const cloudSelect = document.getElementById('hosting-cloud-select');
+      const regionSelect = document.getElementById('hosting-region-select');
+      const regions = next.hostingRegions || [];
+      if (!next.hasEnvMcpFile || !regions.length) {
+        picker.classList.add('hidden');
+        cloudSelect.innerHTML = '';
+        regionSelect.innerHTML = '';
+        return;
+      }
+
+      picker.classList.remove('hidden');
+      const selectedCloud = next.selectedHostingCloud || 'gcp';
+      const selectedRegionId = next.selectedHostingRegionId || regions[0].id;
+      const clouds = [];
+      regions.forEach(function (entry) {
+        if (!clouds.includes(entry.cloud)) clouds.push(entry.cloud);
+      });
+
+      cloudSelect.innerHTML = clouds.map(function (cloud) {
+        const label = cloud === 'gcp' ? 'Google Cloud (GCP)' : 'Amazon Web Services (AWS)';
+        return '<option value="' + escapeHtml(cloud) + '"' + (cloud === selectedCloud ? ' selected' : '') + '>' +
+          escapeHtml(label) + '</option>';
+      }).join('');
+
+      const filtered = regions.filter(function (entry) { return entry.cloud === selectedCloud; });
+      regionSelect.innerHTML = filtered.map(function (entry) {
+        return '<option value="' + escapeHtml(entry.id) + '"' + (entry.id === selectedRegionId ? ' selected' : '') + '>' +
+          escapeHtml(entry.label) + '</option>';
+      }).join('');
     }
 
     function renderWorkspaceEnvPicker(next) {
@@ -1382,7 +1441,7 @@ CTP_CLIENT_SECRET=your-client-secret</pre>
 
       renderWorkspaceEnvPicker(next);
       renderWorkspaceEnvSuffixPicker(next);
-      renderMissingUrlsHint(next);
+      renderHostingPicker(next);
 
       const profile = resolveConnectionProfile(next);
       const canConnect = next.hasWorkspaceEnvFiles && next.workspaceCredentials;
@@ -1410,7 +1469,7 @@ CTP_CLIENT_SECRET=your-client-secret</pre>
           : '';
         subtitle.textContent = 'Using ' + envLabel +
           (next.selectedWorkspaceEnvFile || next.workspaceCredentials?.source || 'workspace .env') +
-          (next.missingAuthApiUrls ? ' · auth/API URLs missing (add .env.mcp)' : '') +
+          (next.missingAuthApiUrls ? ' · add .env.mcp for auth/API URLs' : '') +
           ' · click Connect to start ' + profile.name + ' (' + profile.projectKey + ')';
       } else if (next.hasWorkspaceEnvFiles) {
         banner.classList.add('disconnected');

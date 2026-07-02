@@ -7,18 +7,17 @@ import { syncNativeMcpConfig } from "./nativeMcpBridge";
 import { initProjectMcpContext, ProjectMcpInitResult } from "./projectMcpInit";
 import {
   COMMERCETOOLS_HOSTING_REGIONS,
+  createDefaultEnvMcp,
   createOrUpdateEnvMcpUrls,
-  createWorkspaceSupplementEnvFile,
   ENV_MCP_FILE,
   findActiveWorkspaceCredentials,
   findActiveWorkspaceEnvFiles,
   findActiveWorkspaceEnvProbe,
   getSelectedWorkspaceEnvFile,
   getSelectedWorkspaceEnvSuffix,
-  listSupplementEnvSuffixOptions,
+  hasEnvMcpFile,
   setSelectedWorkspaceEnvFile,
   setSelectedWorkspaceEnvSuffix,
-  supplementEnvFileName,
   WorkspaceCredentials,
   WorkspaceEnvProbe,
 } from "./workspaceEnvCredentials";
@@ -161,112 +160,44 @@ export class CommerceMcpManager {
     this.notifyChanged();
   }
 
-  async createSupplementEnvFile(): Promise<
-    { fileName: string; created: boolean } | undefined
-  > {
+  hasEnvMcpFile(): boolean {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
-      throw new Error("Open a workspace folder before creating a supplement .env file.");
+      return false;
     }
-
-    const workspaceRoot = folder.uri.fsPath;
-    const envFile = this.getSelectedWorkspaceEnvFile() ?? ".env";
-    const suffixOptions = listSupplementEnvSuffixOptions(workspaceRoot, envFile);
-    const picked = await vscode.window.showQuickPick(
-      suffixOptions.map((suffix) => ({
-        label: suffix,
-        description: supplementEnvFileName(suffix),
-        detail:
-          suffix === "STG"
-            ? "Default — pairs with COMM_TOOLS_*_STG in .env"
-            : `Creates ${supplementEnvFileName(suffix)} with Australia GCP URLs`,
-      })),
-      {
-        title: "Environment for supplement .env",
-        placeHolder: "Choose STG, DEV, SIT, PRD, …",
-      }
-    );
-    if (!picked) {
-      return undefined;
-    }
-
-    const result = createWorkspaceSupplementEnvFile(workspaceRoot, picked.label);
-    await setSelectedWorkspaceEnvFile(this.context, result.fileName);
-
-    const uri = vscode.Uri.joinPath(folder.uri, result.fileName);
-    const doc = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(doc, { preview: false });
-
-    this.logs.info(
-      result.created
-        ? `Created supplement env file ${result.fileName}.`
-        : `Opened existing supplement env file ${result.fileName}.`
-    );
-    this.notifyChanged();
-    return { fileName: result.fileName, created: result.created };
+    return hasEnvMcpFile(folder.uri.fsPath);
   }
 
-  async createEnvMcpUrls(): Promise<{ fileName: string; created: boolean } | undefined> {
+  async createEnvMcp(): Promise<{ fileName: string; created: boolean }> {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
       throw new Error("Open a workspace folder before creating .env.mcp.");
     }
 
-    const cloudPick = await vscode.window.showQuickPick(
-      [
-        {
-          label: "Google Cloud (GCP)",
-          description: "Recommended for Australia, Europe, and North America",
-          cloud: "gcp" as const,
-        },
-        {
-          label: "Amazon Web Services (AWS)",
-          description: "Ohio and Frankfurt regions",
-          cloud: "aws" as const,
-        },
-      ],
-      {
-        title: "Cloud provider for commercetools API",
-        placeHolder: "Choose GCP or AWS",
-      }
-    );
-    if (!cloudPick) {
-      return undefined;
-    }
-
-    const regions = COMMERCETOOLS_HOSTING_REGIONS.filter(
-      (entry) => entry.cloud === cloudPick.cloud
-    );
-    const regionPick = await vscode.window.showQuickPick(
-      regions.map((entry) => ({
-        label: entry.label,
-        description: entry.authUrl,
-        entry,
-      })),
-      {
-        title: `${cloudPick.label} region`,
-        placeHolder: "Choose the region that hosts your project",
-      }
-    );
-    if (!regionPick) {
-      return undefined;
-    }
-
-    const workspaceRoot = folder.uri.fsPath;
-    const result = createOrUpdateEnvMcpUrls(workspaceRoot, regionPick.entry);
-    await setSelectedWorkspaceEnvFile(this.context, result.fileName);
-
-    const uri = vscode.Uri.joinPath(folder.uri, result.fileName);
-    const doc = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(doc, { preview: false });
-
+    const result = createDefaultEnvMcp(folder.uri.fsPath);
     this.logs.info(
       result.created
-        ? `Created ${ENV_MCP_FILE} with ${regionPick.entry.label} URLs.`
-        : `Updated ${ENV_MCP_FILE} with ${regionPick.entry.label} URLs.`
+        ? `Created ${ENV_MCP_FILE} with Australia GCP URLs.`
+        : `${ENV_MCP_FILE} already exists — update region below.`
     );
     this.notifyChanged();
     return { fileName: result.fileName, created: result.created };
+  }
+
+  async setHostingRegion(regionId: string): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      throw new Error("Open a workspace folder before updating .env.mcp.");
+    }
+
+    const hostingRegion = COMMERCETOOLS_HOSTING_REGIONS.find((entry) => entry.id === regionId);
+    if (!hostingRegion) {
+      throw new Error(`Unknown commercetools region: ${regionId}`);
+    }
+
+    const result = createOrUpdateEnvMcpUrls(folder.uri.fsPath, hostingRegion);
+    this.logs.info(`Updated ${result.fileName} for ${hostingRegion.label}.`);
+    this.notifyChanged();
   }
 
   async ensureWorkspaceConnection(): Promise<MCPConnection | undefined> {

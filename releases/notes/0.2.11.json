@@ -1,0 +1,16 @@
+{
+  "version": "0.2.11",
+  "summary": "Commerce MCP Studio 0.2.11: in-panel .env.mcp region setup and nested environment selection.",
+  "highlights": [
+    "+ .env.mcp creates auth/API URLs with Australia GCP as the default",
+    "Pick cloud and region directly in the Connections panel",
+    "Environment suffix (STG, DEV, …) is a sub-selection under your .env credentials"
+  ],
+  "releaseNotes": {
+    "changed": [
+      "Replaced per-environment supplement files with a single .env.mcp for commercetools URLs",
+      "Cloud and region selectors update .env.mcp without leaving the studio panel",
+      "Default commercetools API region is now Australia GCP when URLs are not configured"
+    ]
+  }
+}
