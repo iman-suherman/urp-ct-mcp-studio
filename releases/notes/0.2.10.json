@@ -1,0 +1,19 @@
+{
+  "version": "0.2.10",
+  "summary": "Commerce MCP Studio 0.2.10: multi-environment .env credentials and guided .env.mcp region setup.",
+  "highlights": [
+    "Pick STG, DEV, PRD, and other environments when one .env holds suffixed credentials",
+    "Create .env.mcp with auth/API URLs via cloud and region picker",
+    "Read COMM_TOOLS_*_STG style keys from workspace .env files"
+  ],
+  "releaseNotes": {
+    "introduced": [
+      "Environment dropdown probes suffixed variables (e.g. COMM_TOOLS_ADMIN_CLIENT_ID_STG) in a shared .env",
+      "Add URLs to .env.mcp walks through GCP or AWS and your commercetools region",
+      "Supplement .env files still available for per-environment URL overrides"
+    ],
+    "changed": [
+      ".env.mcp URLs layer on top of workspace credentials so secrets can stay in .env"
+    ]
+  }
+}

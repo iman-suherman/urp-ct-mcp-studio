@@ -4,6 +4,38 @@ import * as path from "path";
 const DEFAULT_AUTH_URL = "https://auth.europe-west1.gcp.commercetools.com";
 const DEFAULT_API_URL = "https://api.europe-west1.gcp.commercetools.com";
 
+export const DEFAULT_AUSTRALIA_AUTH_URL =
+  "https://auth.australia-southeast1.gcp.commercetools.com";
+export const DEFAULT_AUSTRALIA_API_URL =
+  "https://api.australia-southeast1.gcp.commercetools.com";
+
+const ENV_SUFFIX_KEY_PATTERN =
+  /^(?:CT_MCP|COMMERCETOOLS|CTP|CTOOLS|COMM_TOOLS)_(?:ADMIN_)?(?:CLIENT_ID|CLIENT_SECRET|PROJECT_KEY|AUTH_URL|API_URL)_([A-Z][A-Z0-9]*)$/;
+
+const AUTH_URL_KEYS = [
+  "CT_MCP_AUTH_URL",
+  "COMMERCETOOLS_AUTH_URL",
+  "CTP_AUTH_URL",
+  "CTOOLS_AUTH_HOST",
+  "AUTH_URL",
+] as const;
+
+const API_URL_KEYS = [
+  "CT_MCP_API_URL",
+  "COMMERCETOOLS_API_URL",
+  "CTP_API_URL",
+  "CTOOLS_API_HOST",
+  "API_URL",
+] as const;
+
+const PROJECT_KEY_KEYS = [
+  "CT_MCP_PROJECT_KEY",
+  "COMMERCETOOLS_PROJECT_KEY",
+  "CTP_PROJECT_KEY",
+  "CTOOLS_PROJECT_KEY",
+  "PROJECT_KEY",
+] as const;
+
 function normalizeCommercetoolsUrls(
   authUrl: string,
   apiUrl: string
@@ -21,6 +53,61 @@ function normalizeCommercetoolsUrls(
 }
 
 export const WORKSPACE_ENV_SELECTED_KEY = "ctMcp.selectedWorkspaceEnvFile";
+export const WORKSPACE_ENV_SUFFIX_KEY = "ctMcp.selectedWorkspaceEnvSuffix";
+
+export interface CommercetoolsHostingRegion {
+  id: string;
+  cloud: "gcp" | "aws";
+  region: string;
+  label: string;
+  authUrl: string;
+  apiUrl: string;
+}
+
+export const COMMERCETOOLS_HOSTING_REGIONS: CommercetoolsHostingRegion[] = [
+  {
+    id: "gcp.australia-southeast1",
+    cloud: "gcp",
+    region: "australia-southeast1",
+    label: "Australia (GCP, Sydney)",
+    authUrl: DEFAULT_AUSTRALIA_AUTH_URL,
+    apiUrl: DEFAULT_AUSTRALIA_API_URL,
+  },
+  {
+    id: "gcp.europe-west1",
+    cloud: "gcp",
+    region: "europe-west1",
+    label: "Europe (GCP, Belgium)",
+    authUrl: DEFAULT_AUTH_URL,
+    apiUrl: DEFAULT_API_URL,
+  },
+  {
+    id: "gcp.us-central1",
+    cloud: "gcp",
+    region: "us-central1",
+    label: "North America (GCP, Iowa)",
+    authUrl: "https://auth.us-central1.gcp.commercetools.com",
+    apiUrl: "https://api.us-central1.gcp.commercetools.com",
+  },
+  {
+    id: "aws.eu-central-1",
+    cloud: "aws",
+    region: "eu-central-1",
+    label: "Europe (AWS, Frankfurt)",
+    authUrl: "https://auth.eu-central-1.aws.commercetools.com",
+    apiUrl: "https://api.eu-central-1.aws.commercetools.com",
+  },
+  {
+    id: "aws.us-east-2",
+    cloud: "aws",
+    region: "us-east-2",
+    label: "North America (AWS, Ohio)",
+    authUrl: "https://auth.us-east-2.aws.commercetools.com",
+    apiUrl: "https://api.us-east-2.aws.commercetools.com",
+  },
+];
+
+export const ENV_MCP_FILE = ".env.mcp";
 
 export interface WorkspaceCredentials {
   workspaceFolder: string;
@@ -32,6 +119,19 @@ export interface WorkspaceCredentials {
   authUrl: string;
   apiUrl: string;
   isAdmin: boolean;
+  envSuffix?: string;
+  hasExplicitAuthUrl: boolean;
+  hasExplicitApiUrl: boolean;
+}
+
+export interface WorkspaceEnvProbe {
+  envFileName: string;
+  detectedEnvSuffixes: string[];
+  selectedEnvSuffix?: string;
+  hasExplicitAuthUrl: boolean;
+  hasExplicitApiUrl: boolean;
+  missingAuthApiUrls: boolean;
+  credentials?: WorkspaceCredentials;
 }
 
 const TEMPLATE_ENV_FILES = new Set([
@@ -79,8 +179,11 @@ export function parseEnvFile(filePath: string): Record<string, string> {
       continue;
     }
     const key = trimmed.slice(0, eq).trim();
+    if (!key) {
+      continue;
+    }
     const value = stripQuotes(trimmed.slice(eq + 1));
-    if (key && value) {
+    if (value) {
       out[key] = value;
     }
   }
@@ -104,6 +207,10 @@ function isPlaceholder(value: string): boolean {
   );
 }
 
+function withEnvSuffix(key: string, envSuffix?: string): string {
+  return envSuffix ? `${key}_${envSuffix}` : key;
+}
+
 function firstDefined(env: Record<string, string>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = env[key]?.trim();
@@ -114,37 +221,291 @@ function firstDefined(env: Record<string, string>, keys: string[]): string | und
   return undefined;
 }
 
+function firstDefinedWithSuffix(
+  env: Record<string, string>,
+  keys: string[],
+  envSuffix?: string
+): string | undefined {
+  if (envSuffix) {
+    const suffixed = keys.map((key) => withEnvSuffix(key, envSuffix));
+    const fromSuffix = firstDefined(env, suffixed);
+    if (fromSuffix) {
+      return fromSuffix;
+    }
+  }
+  return firstDefined(env, keys);
+}
+
+export function envSuffixFromSource(source: string): string | undefined {
+  const base = path.basename(source);
+  if (base === ".env" || base === ".env.local" || base === ".env.mcp") {
+    return undefined;
+  }
+  const part = base.replace(/^\.env\.?/, "");
+  return part ? part.toUpperCase() : undefined;
+}
+
+export function detectEnvSuffixesFromKeys(env: Record<string, string>): string[] {
+  const counts = new Map<string, number>();
+  for (const key of Object.keys(env)) {
+    const match = key.match(ENV_SUFFIX_KEY_PATTERN);
+    if (match) {
+      const suffix = match[1];
+      counts.set(suffix, (counts.get(suffix) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([suffix]) => suffix);
+}
+
+export function detectEnvSuffixesInWorkspace(workspaceRoot: string, envFileName = ".env"): string[] {
+  const env = loadEnvForSource(workspaceRoot, envFileName);
+  const fromFile = envSuffixFromSource(envFileName);
+  const detected = detectEnvSuffixesFromKeys(env);
+  if (fromFile && !detected.includes(fromFile)) {
+    return [fromFile, ...detected];
+  }
+  return detected;
+}
+
+export function getSelectedWorkspaceEnvSuffix(
+  context: import("vscode").ExtensionContext,
+  workspaceRoot: string,
+  envFileName: string
+): string | undefined {
+  const fromFile = envSuffixFromSource(envFileName);
+  if (fromFile) {
+    return fromFile;
+  }
+
+  const detected = detectEnvSuffixesInWorkspace(workspaceRoot, envFileName);
+  if (!detected.length) {
+    return undefined;
+  }
+
+  const saved = context.workspaceState.get<string>(WORKSPACE_ENV_SUFFIX_KEY);
+  if (saved && detected.includes(saved)) {
+    return saved;
+  }
+
+  return detected[0];
+}
+
+export async function setSelectedWorkspaceEnvSuffix(
+  context: import("vscode").ExtensionContext,
+  envSuffix: string
+): Promise<void> {
+  await context.workspaceState.update(WORKSPACE_ENV_SUFFIX_KEY, envSuffix.toUpperCase());
+}
+
+export function buildCommercetoolsRegionUrls(
+  cloud: CommercetoolsHostingRegion["cloud"],
+  region: string
+): { authUrl: string; apiUrl: string } {
+  const known = COMMERCETOOLS_HOSTING_REGIONS.find(
+    (entry) => entry.cloud === cloud && entry.region === region
+  );
+  if (known) {
+    return { authUrl: known.authUrl, apiUrl: known.apiUrl };
+  }
+  return {
+    authUrl: `https://auth.${region}.${cloud}.commercetools.com`,
+    apiUrl: `https://api.${region}.${cloud}.commercetools.com`,
+  };
+}
+
+export function buildEnvMcpUrlUpdates(authUrl: string, apiUrl: string): Record<string, string> {
+  const urls = normalizeCommercetoolsUrls(authUrl, apiUrl);
+  return {
+    CT_MCP_AUTH_URL: urls.authUrl,
+    CT_MCP_API_URL: urls.apiUrl,
+    CTP_AUTH_URL: urls.authUrl,
+    CTP_API_URL: urls.apiUrl,
+    COMMERCETOOLS_AUTH_URL: urls.authUrl,
+    COMMERCETOOLS_API_URL: urls.apiUrl,
+  };
+}
+
+function upsertEnvFileKeys(filePath: string, updates: Record<string, string>): void {
+  const lines: string[] = fs.existsSync(filePath)
+    ? fs.readFileSync(filePath, "utf-8").split("\n")
+    : [];
+  const touched = new Set<string>();
+  const nextLines = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return line;
+    }
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) {
+      return line;
+    }
+    const key = trimmed.slice(0, eq).trim();
+    if (!(key in updates)) {
+      return line;
+    }
+    touched.add(key);
+    return `${key}=${updates[key]}`;
+  });
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (!touched.has(key)) {
+      if (nextLines.length > 0 && nextLines[nextLines.length - 1] !== "") {
+        nextLines.push("");
+      }
+      nextLines.push(`${key}=${value}`);
+    }
+  }
+
+  const body = nextLines.join("\n");
+  fs.writeFileSync(filePath, body.endsWith("\n") ? body : `${body}\n`, "utf-8");
+}
+
+export function createOrUpdateEnvMcpUrls(
+  workspaceRoot: string,
+  hostingRegion: CommercetoolsHostingRegion
+): { fileName: string; created: boolean; filePath: string } {
+  const fileName = ENV_MCP_FILE;
+  const filePath = path.join(workspaceRoot, fileName);
+  const created = !fs.existsSync(filePath);
+  if (created) {
+    const header = [
+      "# Commerce MCP environment — generated by Commerce MCP Studio",
+      "# Auth/API URLs for commercetools HTTP API",
+      `# Region: ${hostingRegion.label}`,
+      "",
+    ].join("\n");
+    fs.writeFileSync(
+      filePath,
+      `${header}${Object.entries(buildEnvMcpUrlUpdates(hostingRegion.authUrl, hostingRegion.apiUrl))
+        .map(([key, value]) => `${key}=${value}`)
+        .join("\n")}\n`,
+      "utf-8"
+    );
+    return { fileName, created: true, filePath };
+  }
+
+  upsertEnvFileKeys(filePath, buildEnvMcpUrlUpdates(hostingRegion.authUrl, hostingRegion.apiUrl));
+  return { fileName, created: false, filePath };
+}
+
+export function probeWorkspaceEnv(
+  workspaceRoot: string,
+  envFileName: string,
+  options: { workspaceFolder?: string; envSuffix?: string } = {}
+): WorkspaceEnvProbe {
+  const env = loadEnvForSource(workspaceRoot, envFileName);
+  const detectedEnvSuffixes = detectEnvSuffixesInWorkspace(workspaceRoot, envFileName);
+  const selectedEnvSuffix =
+    options.envSuffix ??
+    (envSuffixFromSource(envFileName) ?? detectedEnvSuffixes[0]);
+
+  const explicitAuthUrl = firstDefinedWithSuffix(env, [...AUTH_URL_KEYS], selectedEnvSuffix);
+  const explicitApiUrl = firstDefinedWithSuffix(env, [...API_URL_KEYS], selectedEnvSuffix);
+  const credentials = resolveCredentialsFromEnv(env, {
+    workspaceFolder: options.workspaceFolder,
+    source: envFileName,
+    envSuffix: selectedEnvSuffix,
+  });
+
+  return {
+    envFileName,
+    detectedEnvSuffixes,
+    selectedEnvSuffix,
+    hasExplicitAuthUrl: Boolean(explicitAuthUrl),
+    hasExplicitApiUrl: Boolean(explicitApiUrl),
+    missingAuthApiUrls: !explicitAuthUrl || !explicitApiUrl,
+    credentials,
+  };
+}
+
+export function supplementEnvFileName(envSuffix: string): string {
+  return `.env.${envSuffix.trim().toLowerCase()}`;
+}
+
+export function buildSupplementEnvContent(envSuffix: string): string {
+  const label = envSuffix.trim().toUpperCase();
+  const authUrl = DEFAULT_AUSTRALIA_AUTH_URL;
+  const apiUrl = DEFAULT_AUSTRALIA_API_URL;
+  return [
+    `# Commerce MCP supplement for ${label} — generated by Commerce MCP Studio`,
+    `# Pair with COMM_TOOLS_*_${label} (or CTP_*_${label}) credentials in .env`,
+    "",
+    `CT_MCP_AUTH_URL=${authUrl}`,
+    `CT_MCP_API_URL=${apiUrl}`,
+    `CTP_AUTH_URL=${authUrl}`,
+    `CTP_API_URL=${apiUrl}`,
+    `COMMERCETOOLS_AUTH_URL=${authUrl}`,
+    `COMMERCETOOLS_API_URL=${apiUrl}`,
+    "",
+  ].join("\n");
+}
+
+export function createWorkspaceSupplementEnvFile(
+  workspaceRoot: string,
+  envSuffix: string
+): { fileName: string; created: boolean; filePath: string } {
+  const fileName = supplementEnvFileName(envSuffix);
+  const filePath = path.join(workspaceRoot, fileName);
+  if (fs.existsSync(filePath)) {
+    return { fileName, created: false, filePath };
+  }
+  fs.writeFileSync(filePath, buildSupplementEnvContent(envSuffix), "utf-8");
+  return { fileName, created: true, filePath };
+}
+
+export function listSupplementEnvSuffixOptions(workspaceRoot: string, envFileName = ".env"): string[] {
+  const detected = detectEnvSuffixesInWorkspace(workspaceRoot, envFileName);
+  const merged = new Set<string>([...detected, "STG", "SIT", "DEV", "PRD", "TEST", "UAT"]);
+  return [...merged];
+}
+
 function resolveClientCredentials(
-  env: Record<string, string>
+  env: Record<string, string>,
+  envSuffix?: string
 ): { clientId: string; clientSecret: string; isAdmin: boolean } | undefined {
-  const adminClientId = firstDefined(env, [
-    "CT_MCP_ADMIN_CLIENT_ID",
-    "COMM_TOOLS_ADMIN_CLIENT_ID",
-    "COMMERCETOOLS_ADMIN_CLIENT_ID",
-  ]);
-  const adminClientSecret = firstDefined(env, [
-    "CT_MCP_ADMIN_CLIENT_SECRET",
-    "COMM_TOOLS_ADMIN_CLIENT_SECRET",
-    "COMMERCETOOLS_ADMIN_CLIENT_SECRET",
-  ]);
+  const adminClientId = firstDefinedWithSuffix(
+    env,
+    ["CT_MCP_ADMIN_CLIENT_ID", "COMM_TOOLS_ADMIN_CLIENT_ID", "COMMERCETOOLS_ADMIN_CLIENT_ID"],
+    envSuffix
+  );
+  const adminClientSecret = firstDefinedWithSuffix(
+    env,
+    [
+      "CT_MCP_ADMIN_CLIENT_SECRET",
+      "COMM_TOOLS_ADMIN_CLIENT_SECRET",
+      "COMMERCETOOLS_ADMIN_CLIENT_SECRET",
+    ],
+    envSuffix
+  );
   if (adminClientId && adminClientSecret) {
     return { clientId: adminClientId, clientSecret: adminClientSecret, isAdmin: true };
   }
 
-  const clientId = firstDefined(env, [
-    "CT_MCP_CLIENT_ID",
-    "COMMERCETOOLS_CLIENT_ID",
-    "CTP_CLIENT_ID",
-    "COMM_TOOLS_CLIENT_ID",
-    "CLIENT_ID",
-  ]);
-  const clientSecret = firstDefined(env, [
-    "CT_MCP_CLIENT_SECRET",
-    "COMMERCETOOLS_CLIENT_SECRET",
-    "CTP_CLIENT_SECRET",
-    "COMM_TOOLS_CLIENT_SECRET",
-    "CLIENT_SECRET",
-  ]);
+  const clientId = firstDefinedWithSuffix(
+    env,
+    [
+      "CT_MCP_CLIENT_ID",
+      "COMMERCETOOLS_CLIENT_ID",
+      "CTP_CLIENT_ID",
+      "COMM_TOOLS_CLIENT_ID",
+      "CLIENT_ID",
+    ],
+    envSuffix
+  );
+  const clientSecret = firstDefinedWithSuffix(
+    env,
+    [
+      "CT_MCP_CLIENT_SECRET",
+      "COMMERCETOOLS_CLIENT_SECRET",
+      "CTP_CLIENT_SECRET",
+      "COMM_TOOLS_CLIENT_SECRET",
+      "CLIENT_SECRET",
+    ],
+    envSuffix
+  );
   if (!clientId || !clientSecret) {
     return undefined;
   }
@@ -162,43 +523,72 @@ export function connectionNameFromEnvFile(envFile: string): string {
   return suffix ? `Workspace ${suffix.toUpperCase()}` : "Workspace";
 }
 
+function resolveEnvSuffix(
+  env: Record<string, string>,
+  options: { source?: string; envSuffix?: string }
+): string | undefined {
+  if (options.envSuffix) {
+    return options.envSuffix;
+  }
+  const fromSource = options.source ? envSuffixFromSource(options.source) : undefined;
+  if (fromSource) {
+    return fromSource;
+  }
+  const detected = detectEnvSuffixesFromKeys(env);
+  return detected[0];
+}
+
+function loadEnvForSource(workspaceRoot: string, envFileName: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  const layerFiles: string[] = [];
+
+  if (fs.existsSync(path.join(workspaceRoot, ".env"))) {
+    layerFiles.push(".env");
+  }
+
+  if (envFileName !== ".env" && envFileName !== ENV_MCP_FILE) {
+    layerFiles.push(envFileName);
+  }
+
+  if (fs.existsSync(path.join(workspaceRoot, ENV_MCP_FILE))) {
+    layerFiles.push(ENV_MCP_FILE);
+  } else if (envFileName === ENV_MCP_FILE) {
+    layerFiles.push(ENV_MCP_FILE);
+  }
+
+  const seen = new Set<string>();
+  for (const file of layerFiles) {
+    if (seen.has(file)) {
+      continue;
+    }
+    seen.add(file);
+    Object.assign(env, parseEnvFile(path.join(workspaceRoot, file)));
+  }
+
+  return env;
+}
+
 export function resolveCredentialsFromEnv(
   env: Record<string, string>,
-  options: { workspaceFolder?: string; source?: string } = {}
+  options: { workspaceFolder?: string; source?: string; envSuffix?: string } = {}
 ): WorkspaceCredentials | undefined {
-  const projectKey = firstDefined(env, [
-    "CT_MCP_PROJECT_KEY",
-    "COMMERCETOOLS_PROJECT_KEY",
-    "CTP_PROJECT_KEY",
-    "CTOOLS_PROJECT_KEY",
-    "PROJECT_KEY",
-  ]);
-  const client = resolveClientCredentials(env);
+  const envSuffix = resolveEnvSuffix(env, options);
+  const projectKey = firstDefinedWithSuffix(env, [...PROJECT_KEY_KEYS], envSuffix);
+  const client = resolveClientCredentials(env, envSuffix);
   if (!projectKey || !client) {
     return undefined;
   }
 
-  const authUrl =
-    firstDefined(env, [
-      "CT_MCP_AUTH_URL",
-      "COMMERCETOOLS_AUTH_URL",
-      "CTP_AUTH_URL",
-      "CTOOLS_AUTH_HOST",
-      "AUTH_URL",
-    ]) ?? DEFAULT_AUTH_URL;
-  const apiUrl =
-    firstDefined(env, [
-      "CT_MCP_API_URL",
-      "COMMERCETOOLS_API_URL",
-      "CTP_API_URL",
-      "CTOOLS_API_HOST",
-      "API_URL",
-    ]) ?? DEFAULT_API_URL;
+  const explicitAuthUrl = firstDefinedWithSuffix(env, [...AUTH_URL_KEYS], envSuffix);
+  const explicitApiUrl = firstDefinedWithSuffix(env, [...API_URL_KEYS], envSuffix);
+  const authUrl = explicitAuthUrl ?? DEFAULT_AUTH_URL;
+  const apiUrl = explicitApiUrl ?? DEFAULT_API_URL;
   const urls = normalizeCommercetoolsUrls(authUrl, apiUrl);
 
   const name =
     firstDefined(env, ["CT_MCP_CONNECTION_NAME"]) ??
     (options.source ? connectionNameFromEnvFile(options.source) : undefined) ??
+    (envSuffix ? `Workspace ${envSuffix}` : undefined) ??
     options.workspaceFolder ??
     projectKey;
 
@@ -212,6 +602,9 @@ export function resolveCredentialsFromEnv(
     authUrl: urls.authUrl,
     apiUrl: urls.apiUrl,
     isAdmin: client.isAdmin,
+    envSuffix,
+    hasExplicitAuthUrl: Boolean(explicitAuthUrl),
+    hasExplicitApiUrl: Boolean(explicitApiUrl),
   };
 }
 
@@ -290,14 +683,15 @@ export async function setSelectedWorkspaceEnvFile(
 export function findWorkspaceCredentialsFromFile(
   workspaceRoot: string,
   envFileName: string,
-  workspaceFolderName?: string
+  workspaceFolderName?: string,
+  envSuffix?: string
 ): WorkspaceCredentials | undefined {
   const filePath = path.join(workspaceRoot, envFileName);
   if (!fs.existsSync(filePath)) {
     return undefined;
   }
 
-  const env = parseEnvFile(filePath);
+  const env = loadEnvForSource(workspaceRoot, envFileName);
   if (Object.keys(env).length === 0) {
     return undefined;
   }
@@ -305,16 +699,23 @@ export function findWorkspaceCredentialsFromFile(
   return resolveCredentialsFromEnv(env, {
     workspaceFolder: workspaceFolderName,
     source: envFileName,
+    envSuffix: envSuffix ?? envSuffixFromSource(envFileName),
   });
 }
 
 export function findWorkspaceCredentials(
   workspaceRoot: string,
   workspaceFolderName?: string,
-  envFileName?: string
+  envFileName?: string,
+  envSuffix?: string
 ): WorkspaceCredentials | undefined {
   if (envFileName) {
-    return findWorkspaceCredentialsFromFile(workspaceRoot, envFileName, workspaceFolderName);
+    return findWorkspaceCredentialsFromFile(
+      workspaceRoot,
+      envFileName,
+      workspaceFolderName,
+      envSuffix
+    );
   }
 
   const envFiles = listWorkspaceEnvFiles(workspaceRoot);
@@ -330,7 +731,44 @@ export function findWorkspaceCredentials(
   return resolveCredentialsFromEnv(merged.env, {
     workspaceFolder: workspaceFolderName,
     source: merged.sources.join(" + "),
+    envSuffix,
   });
+}
+
+export function findActiveWorkspaceEnvProbe(
+  context?: import("vscode").ExtensionContext
+): WorkspaceEnvProbe | undefined {
+  // Lazy import keeps this module testable outside VS Code.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const vscode = require("vscode") as typeof import("vscode");
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders?.length) {
+    return undefined;
+  }
+
+  for (const folder of folders) {
+    const workspaceRoot = folder.uri.fsPath;
+    const envFileName = context
+      ? getSelectedWorkspaceEnvFile(context, workspaceRoot)
+      : listWorkspaceEnvFileNames(workspaceRoot)[0];
+    if (!envFileName) {
+      continue;
+    }
+
+    const envSuffix = context
+      ? getSelectedWorkspaceEnvSuffix(context, workspaceRoot, envFileName)
+      : undefined;
+
+    const probe = probeWorkspaceEnv(workspaceRoot, envFileName, {
+      workspaceFolder: folder.name,
+      envSuffix,
+    });
+    if (probe.credentials || probe.detectedEnvSuffixes.length > 0) {
+      return probe;
+    }
+  }
+
+  return undefined;
 }
 
 export function findActiveWorkspaceEnvFiles(): string[] {
@@ -369,10 +807,15 @@ export function findActiveWorkspaceCredentials(
       ? getSelectedWorkspaceEnvFile(context, workspaceRoot)
       : listWorkspaceEnvFileNames(workspaceRoot)[0];
 
+    const envSuffix = context
+      ? getSelectedWorkspaceEnvSuffix(context, workspaceRoot, selectedEnvFile ?? ".env")
+      : undefined;
+
     const credentials = findWorkspaceCredentials(
       workspaceRoot,
       folder.name,
-      selectedEnvFile
+      selectedEnvFile,
+      envSuffix
     );
     if (credentials) {
       return credentials;

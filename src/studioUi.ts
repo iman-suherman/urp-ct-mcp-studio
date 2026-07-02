@@ -65,6 +65,11 @@ export interface StudioPanelState {
   hasWorkspaceEnvFiles: boolean;
   workspaceEnvSources: string[];
   selectedWorkspaceEnvFile?: string;
+  detectedEnvSuffixes: string[];
+  selectedWorkspaceEnvSuffix?: string;
+  missingAuthApiUrls: boolean;
+  hasExplicitAuthUrl: boolean;
+  hasExplicitApiUrl: boolean;
   autoConnectOnStartup: boolean;
   currentVersion: string;
   latestVersion?: string;
@@ -83,6 +88,9 @@ export type StudioWebviewMessage =
   | { type: "switchTab"; tab: StudioPanelState["activeTab"] }
   | { type: "connectFromWorkspace" }
   | { type: "selectWorkspaceEnv"; envFile: string }
+  | { type: "selectWorkspaceEnvSuffix"; envSuffix: string }
+  | { type: "createSupplementEnv" }
+  | { type: "createEnvMcpUrls" }
   | { type: "disconnect" }
   | { type: "refresh" }
   | { type: "openExplorer"; toolName?: string }
@@ -122,6 +130,7 @@ export class StudioUiController {
 
   async pushState(error?: string, busy?: boolean): Promise<void> {
     const workspaceCredentials = this.manager.getWorkspaceCredentials();
+    const workspaceEnvProbe = this.manager.getWorkspaceEnvProbe();
     const workspaceEnvSources = this.manager.getWorkspaceEnvFiles();
     const update = this.updateService.getState();
     const active = await this.manager.getActiveConnection();
@@ -206,6 +215,11 @@ export class StudioUiController {
       hasWorkspaceEnvFiles: workspaceEnvSources.length > 0,
       workspaceEnvSources,
       selectedWorkspaceEnvFile: this.manager.getSelectedWorkspaceEnvFile(),
+      detectedEnvSuffixes: workspaceEnvProbe?.detectedEnvSuffixes ?? [],
+      selectedWorkspaceEnvSuffix: workspaceEnvProbe?.selectedEnvSuffix,
+      missingAuthApiUrls: workspaceEnvProbe?.missingAuthApiUrls ?? false,
+      hasExplicitAuthUrl: workspaceEnvProbe?.hasExplicitAuthUrl ?? false,
+      hasExplicitApiUrl: workspaceEnvProbe?.hasExplicitApiUrl ?? false,
       autoConnectOnStartup: resolveStudioConfig().autoConnectOnStartup,
       currentVersion: update.currentVersion,
       latestVersion: update.latestVersion,
@@ -255,6 +269,47 @@ export class StudioUiController {
       case "selectWorkspaceEnv":
         await this.manager.setSelectedWorkspaceEnvFile(message.envFile);
         await this.pushState(`Using ${message.envFile} for workspace credentials.`);
+        break;
+
+      case "selectWorkspaceEnvSuffix":
+        await this.manager.setSelectedWorkspaceEnvSuffix(message.envSuffix);
+        await this.pushState(`Using ${message.envSuffix} credentials from workspace .env.`);
+        break;
+
+      case "createSupplementEnv":
+        await this.pushState(undefined, true);
+        try {
+          const result = await this.manager.createSupplementEnvFile();
+          if (result) {
+            const note = result.created
+              ? `Created ${result.fileName} with Australia GCP auth/API URLs.`
+              : `${result.fileName} already exists — opened for editing.`;
+            await this.pushState(note);
+          } else {
+            await this.pushState();
+          }
+        } catch (err) {
+          const text = err instanceof Error ? err.message : String(err);
+          await this.pushState(text);
+        }
+        break;
+
+      case "createEnvMcpUrls":
+        await this.pushState(undefined, true);
+        try {
+          const result = await this.manager.createEnvMcpUrls();
+          if (result) {
+            const note = result.created
+              ? `Created ${result.fileName} with selected region URLs.`
+              : `Updated ${result.fileName} with selected region URLs.`;
+            await this.pushState(note);
+          } else {
+            await this.pushState();
+          }
+        } catch (err) {
+          const text = err instanceof Error ? err.message : String(err);
+          await this.pushState(text);
+        }
         break;
 
       case "disconnect":
@@ -662,6 +717,15 @@ export function renderStudioHtml(options: {
       flex-direction: column;
       gap: 4px;
     }
+    .connection-env-picker-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .connection-env-picker-row select {
+      flex: 1;
+      min-width: 0;
+    }
     .connection-env-picker label {
       font-size: 11px;
       color: var(--vscode-descriptionForeground);
@@ -674,6 +738,18 @@ export function renderStudioHtml(options: {
       background: var(--vscode-input-background);
       color: var(--vscode-input-foreground);
       font: inherit;
+    }
+    .connection-env-suffix-hint {
+      margin: 0;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .connection-env-mcp-hint {
+      margin: 10px 0 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(251, 191, 36, .35);
+      background: rgba(251, 191, 36, .08);
     }
     .connection-env-hint {
       border: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25));
@@ -865,7 +941,27 @@ export function renderStudioHtml(options: {
 
     <div id="connection-env-picker" class="connection-env-picker hidden">
       <label for="workspace-env-select">Env file</label>
-      <select id="workspace-env-select" aria-label="Workspace env file"></select>
+      <div class="connection-env-picker-row">
+        <select id="workspace-env-select" aria-label="Workspace env file"></select>
+        <button id="btn-create-supplement-env" type="button" title="Create per-environment supplement .env with Australia GCP URLs">+ Supplement</button>
+      </div>
+    </div>
+
+    <div id="connection-env-suffix-picker" class="connection-env-picker hidden">
+      <label for="workspace-env-suffix-select">Environment</label>
+      <select id="workspace-env-suffix-select" aria-label="Workspace environment suffix"></select>
+      <p class="connection-env-suffix-hint">Probed from suffixed variables in your <code>.env</code> (e.g. <code>COMM_TOOLS_ADMIN_CLIENT_ID_STG</code>).</p>
+    </div>
+
+    <div id="connection-env-mcp-hint" class="connection-env-mcp-hint hidden">
+      <p class="connection-env-hint-title">Auth/API URLs not configured</p>
+      <p class="connection-env-hint-desc">
+        Credentials were found, but no auth or API URL is set for the selected environment.
+        Create or update <code>.env.mcp</code> with the commercetools region and cloud for your project.
+      </p>
+      <div class="connection-copilot-actions">
+        <button id="btn-create-env-mcp" class="primary" type="button">Add URLs to .env.mcp</button>
+      </div>
     </div>
 
     <div id="connection-env-hint" class="connection-env-hint hidden">
@@ -875,16 +971,25 @@ export function renderStudioHtml(options: {
         <code>.env.local</code>, <code>.env.dev</code>, <code>.env.sit</code>, <code>.env.stg</code>, or <code>.env.mcp</code>.
         When multiple files exist, pick which one to connect with below.
         Supported prefixes: <code>CTP_*</code>, <code>CTOOLS_*</code>, <code>COMM_TOOLS_*</code>, <code>CT_MCP_*</code>.
+        Use environment suffixes in <code>.env</code> (e.g. <code>COMM_TOOLS_ADMIN_CLIENT_ID_STG</code>) and a supplement file
+        (e.g. <code>.env.stg</code>) for auth/API URLs.
       </p>
-      <pre class="connection-env-example"># .env
+      <pre class="connection-env-example"># .env — credentials with environment suffix
+COMM_TOOLS_ADMIN_CLIENT_ID_STG=your-client-id
+COMM_TOOLS_ADMIN_CLIENT_SECRET_STG=your-client-secret
+CTP_PROJECT_KEY_STG=your-project-key
+
+# .env.stg — supplement (use + Supplement, defaults to Australia GCP)
+CTP_AUTH_URL=https://auth.australia-southeast1.gcp.commercetools.com
+CTP_API_URL=https://api.australia-southeast1.gcp.commercetools.com
+
+# Or unsuffixed keys in a single file
 CTP_PROJECT_KEY=my-project-key
 CTP_CLIENT_ID=your-client-id
-CTP_CLIENT_SECRET=your-client-secret
-CTP_AUTH_URL=https://auth.europe-west1.gcp.commercetools.com
-CTP_API_URL=https://api.europe-west1.gcp.commercetools.com
-
-# Optional
-CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
+CTP_CLIENT_SECRET=your-client-secret</pre>
+      <div class="connection-copilot-actions" style="margin-top:8px;">
+        <button id="btn-create-env-mcp-hint" type="button">Add URLs to .env.mcp</button>
+      </div>
     </div>
 
     <div id="connection-details" class="connection-details hidden">
@@ -1132,6 +1237,21 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
         vscode.postMessage({ type: 'selectWorkspaceEnv', envFile: target.value });
       }
     });
+    document.getElementById('btn-create-supplement-env').addEventListener('click', () => {
+      vscode.postMessage({ type: 'createSupplementEnv' });
+    });
+    document.getElementById('btn-create-env-mcp').addEventListener('click', () => {
+      vscode.postMessage({ type: 'createEnvMcpUrls' });
+    });
+    document.getElementById('btn-create-env-mcp-hint').addEventListener('click', () => {
+      vscode.postMessage({ type: 'createEnvMcpUrls' });
+    });
+    document.getElementById('workspace-env-suffix-select').addEventListener('change', (event) => {
+      const target = event.target;
+      if (target.value) {
+        vscode.postMessage({ type: 'selectWorkspaceEnvSuffix', envSuffix: target.value });
+      }
+    });
 
     function escapeHtml(value) {
       return String(value || '')
@@ -1198,6 +1318,36 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       }).join('');
     }
 
+    function renderWorkspaceEnvSuffixPicker(next) {
+      const picker = document.getElementById('connection-env-suffix-picker');
+      const selectEl = document.getElementById('workspace-env-suffix-select');
+      const suffixes = next.detectedEnvSuffixes || [];
+      const selectedFile = next.selectedWorkspaceEnvFile || '';
+      const suffixPinnedByFile = selectedFile &&
+        selectedFile !== '.env' &&
+        selectedFile !== '.env.local' &&
+        selectedFile !== '.env.mcp';
+      if (suffixPinnedByFile || !suffixes.length || suffixes.length < 2) {
+        picker.classList.add('hidden');
+        selectEl.innerHTML = '';
+        return;
+      }
+
+      picker.classList.remove('hidden');
+      const selected = next.selectedWorkspaceEnvSuffix || suffixes[0];
+      selectEl.innerHTML = suffixes.map(function (suffix) {
+        return '<option value="' + escapeHtml(suffix) + '"' + (suffix === selected ? ' selected' : '') + '>' +
+          escapeHtml(suffix) + '</option>';
+      }).join('');
+    }
+
+    function renderMissingUrlsHint(next) {
+      const hint = document.getElementById('connection-env-mcp-hint');
+      const profile = resolveConnectionProfile(next);
+      const show = Boolean(profile) && next.missingAuthApiUrls === true && next.connected !== true;
+      hint.classList.toggle('hidden', !show);
+    }
+
     function renderWorkspaceEnvPicker(next) {
       const picker = document.getElementById('connection-env-picker');
       const selectEl = document.getElementById('workspace-env-select');
@@ -1231,6 +1381,8 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       const copilotHint = document.getElementById('connection-copilot-hint');
 
       renderWorkspaceEnvPicker(next);
+      renderWorkspaceEnvSuffixPicker(next);
+      renderMissingUrlsHint(next);
 
       const profile = resolveConnectionProfile(next);
       const canConnect = next.hasWorkspaceEnvFiles && next.workspaceCredentials;
@@ -1253,7 +1405,12 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
       } else if (profile) {
         banner.classList.add('ready');
         title.textContent = 'Ready to connect';
-        subtitle.textContent = 'Using ' + (next.selectedWorkspaceEnvFile || next.workspaceCredentials?.source || 'workspace .env') +
+        const envLabel = next.selectedWorkspaceEnvSuffix
+          ? next.selectedWorkspaceEnvSuffix + ' · '
+          : '';
+        subtitle.textContent = 'Using ' + envLabel +
+          (next.selectedWorkspaceEnvFile || next.workspaceCredentials?.source || 'workspace .env') +
+          (next.missingAuthApiUrls ? ' · auth/API URLs missing (add .env.mcp)' : '') +
           ' · click Connect to start ' + profile.name + ' (' + profile.projectKey + ')';
       } else if (next.hasWorkspaceEnvFiles) {
         banner.classList.add('disconnected');
@@ -1285,8 +1442,9 @@ CT_MCP_CONNECTION_NAME=my-commercetools-project</pre>
           ['Connection', profile.name],
           ['Project key', profile.projectKey],
           ['Client ID', maskClientId(profile.clientId)],
-          ['Auth URL', profile.authUrl || '—'],
-          ['API URL', profile.apiUrl || '—'],
+          ['Environment', next.selectedWorkspaceEnvSuffix || (next.detectedEnvSuffixes || [])[0] || '—'],
+          ['Auth URL', (profile.authUrl || '—') + (next.hasExplicitAuthUrl ? '' : ' (default)')],
+          ['API URL', (profile.apiUrl || '—') + (next.hasExplicitApiUrl ? '' : ' (default)')],
           ['Credentials', profile.source ? profile.source : '—'],
           ['Status', connected ? 'Connected' : (busy ? 'Connecting…' : 'Disconnected')],
         ];
