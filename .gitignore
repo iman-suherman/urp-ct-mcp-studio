@@ -16,6 +16,7 @@ logs/*
 
 # Project-local Google ADC (created by npm run login — do not commit)
 .gcloud/application_default_credentials.json
+.officeless-ai/
 
 # Cursor IDE (local only)
 .cursor/mcp.json
