@@ -42,6 +42,7 @@
     "package": "vsce package --out releases",
     "login": "node scripts/gcp-adc-login.cjs",
     "generate-env": "node scripts/generate-env.cjs",
+    "seed:secrets": "node scripts/seed-secrets.cjs",
     "upload": "node scripts/upload-extension.cjs",
     "release": "node scripts/release.cjs",
     "deploy:extension": "node scripts/release.cjs",
