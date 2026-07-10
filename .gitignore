@@ -14,6 +14,9 @@ logs/*
 # Local environment (created by npm run generate-env — do not commit)
 .env
 
+# Local CSM project link (cp .tickproject.example .tickproject)
+.tickproject
+
 # Project-local Google ADC (created by npm run login — do not commit)
 .gcloud/application_default_credentials.json
 .officeless-ai/
