@@ -3,6 +3,7 @@
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
 const { applyGcpEnv } = require("./apply-gcp-env.cjs");
@@ -14,6 +15,18 @@ const shell = process.platform === "win32";
 function fail(message) {
   console.error(`deploy:registry: ${message}`);
   process.exit(1);
+}
+
+function requireGhcrDeploy() {
+  const candidates = [
+    process.env.SUHERMAN_NET_INFRA_ROOT?.trim(),
+    path.join(os.homedir(), "src", "personal", "suherman-net-infra"),
+  ].filter(Boolean);
+  for (const infraRoot of candidates) {
+    const helper = path.join(infraRoot, "scripts", "lib", "ghcr-cloudrun-deploy.cjs");
+    if (fs.existsSync(helper)) return require(helper);
+  }
+  fail("suherman-net-infra not found. Set SUHERMAN_NET_INFRA_ROOT or clone to ~/src/personal/suherman-net-infra");
 }
 
 function ensureGcpEnv() {
@@ -83,13 +96,26 @@ function main() {
     }
   }
 
-  console.log(`deploy:registry: deploying ${serviceName} to Cloud Run (${region})…`);
+  const { buildAndPushImage } = requireGhcrDeploy();
+  let image;
+  try {
+    image = buildAndPushImage({
+      cwd: root,
+      contextDir: serviceDir,
+      imageName: "ct-mcp-registry-api",
+      logPrefix: "deploy:registry",
+    });
+  } catch (error) {
+    fail(error.message || String(error));
+  }
+
+  console.log(`deploy:registry: deploying ${serviceName} ← ${image} (${region})…`);
   run("gcloud", [
     "run",
     "deploy",
     serviceName,
-    "--source",
-    serviceDir,
+    "--image",
+    image,
     "--project",
     projectId,
     "--region",

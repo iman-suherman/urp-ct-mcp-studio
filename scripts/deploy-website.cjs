@@ -1,8 +1,9 @@
 /**
- * Deploy the Next.js marketing website to Cloud Run.
+ * Deploy the Next.js marketing website to Cloud Run via GHCR.
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { resolveGcpProjectId } = require("./gcp-config.cjs");
 const { applyGcpEnv } = require("./apply-gcp-env.cjs");
@@ -36,6 +37,18 @@ function fail(message) {
   process.exit(1);
 }
 
+function requireGhcrDeploy() {
+  const candidates = [
+    process.env.SUHERMAN_NET_INFRA_ROOT?.trim(),
+    path.join(os.homedir(), "src", "personal", "suherman-net-infra"),
+  ].filter(Boolean);
+  for (const infraRoot of candidates) {
+    const helper = path.join(infraRoot, "scripts", "lib", "ghcr-cloudrun-deploy.cjs");
+    if (fs.existsSync(helper)) return require(helper);
+  }
+  fail("suherman-net-infra not found. Set SUHERMAN_NET_INFRA_ROOT or clone to ~/src/personal/suherman-net-infra");
+}
+
 function ensureGcpEnv() {
   return applyGcpEnv(root);
 }
@@ -67,21 +80,37 @@ function main() {
     "https://ct-mcp-registry.suherman.net";
   const downloadBase = resolveDownloadBase();
 
-  console.log(`deploy:website: deploying ${serviceName} to Cloud Run (${region})…`);
+  const { buildAndPushImage } = requireGhcrDeploy();
+  let image;
+  try {
+    image = buildAndPushImage({
+      cwd: root,
+      contextDir: websiteDir,
+      imageName: "ct-mcp-website",
+      buildArgs: {
+        NEXT_PUBLIC_REGISTRY_API_URL: registryApiUrl,
+        NEXT_PUBLIC_PLUGIN_ID: "ct-mcp-studio",
+        NEXT_PUBLIC_DOWNLOAD_BASE_URL: downloadBase,
+      },
+      logPrefix: "deploy:website",
+    });
+  } catch (error) {
+    fail(error.message || String(error));
+  }
+
+  console.log(`deploy:website: deploying ${serviceName} ← ${image} (${region})…`);
   run("gcloud", [
     "run",
     "deploy",
     serviceName,
-    "--source",
-    websiteDir,
+    "--image",
+    image,
     "--project",
     projectId,
     "--region",
     region,
     "--allow-unauthenticated",
     "--quiet",
-    "--set-build-env-vars",
-    `NEXT_PUBLIC_REGISTRY_API_URL=${registryApiUrl},NEXT_PUBLIC_PLUGIN_ID=ct-mcp-studio,NEXT_PUBLIC_DOWNLOAD_BASE_URL=${downloadBase}`,
   ]);
 
   console.log("deploy:website: done");
